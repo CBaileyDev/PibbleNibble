@@ -1,0 +1,93 @@
+/* ThemeSwitcher.module.css */
+
+.grid {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.card {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.card:active {
+  transform: translateY(0);
+}
+
+.card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
+}
+
+/* ── Swatch row ─────────────────────────────────────────────────── */
+
+.swatchRow {
+  display: flex;
+  gap: 3px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  height: 28px;
+}
+
+.swatch {
+  flex: 1;
+  display: block;
+}
+
+/* ── Label + subtitle ───────────────────────────────────────────── */
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.8125rem; /* 13px */
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+.subtitle {
+  font-family: var(--font-body);
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+/* ── Active checkmark ───────────────────────────────────────────── */
+
+.check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-radius: var(--r-xs);
+}
