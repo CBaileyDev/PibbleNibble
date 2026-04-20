@@ -308,3 +308,285 @@ body {
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* ─── Accent glow (added to both themes) ─────────────────────────────────────*/
+:root {
+  --accent-glow: rgba(0, 204, 255, 0.35);
+  --grid-color:  rgba(226, 236, 255, 0.03);
+  --texture-opacity: 0.5;
+
+  /* Blocky radius tokens (design spec) */
+  --r-none: 0px;
+  --r-xs:   2px;
+  --r-sm:   3px;
+  --r-md:   4px;
+  --r-lg:   6px;
+  --r-pill: 999px;
+
+  /* Motion */
+  --ease-out:  cubic-bezier(.2,.8,.2,1);
+  --ease-snap: cubic-bezier(.5,1.6,.4,1);
+  --dur-fast:  120ms;
+  --dur-base:  200ms;
+  --dur-slow:  320ms;
+}
+
+[data-theme="blossom"] {
+  --accent-glow: rgba(224, 68, 106, 0.30);
+  --grid-color:  rgba(60, 26, 39, 0.04);
+}
+
+/* ─── Pixel grid texture overlay ─────────────────────────────────────────────*/
+body.textured::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: var(--texture-opacity);
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, #000 50%, transparent 90%);
+}
+
+/* ─── Buttons — chunky, tactile, blocky ──────────────────────────────────────*/
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  padding: 12px 20px;
+  border-radius: var(--r-sm);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+}
+.btn:active   { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-color: var(--btn-primary-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.25),
+    inset 0 -2px 0 rgba(0,0,0,0.25),
+    0 2px 0 rgba(0,0,0,0.35);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.3),
+    inset 0 -2px 0 rgba(0,0,0,0.2),
+    0 3px 0 rgba(0,0,0,0.35),
+    0 0 24px var(--accent-glow);
+}
+.btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border-color: var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 2px 0 rgba(0,0,0,0.25);
+}
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+  box-shadow: none;
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-danger {
+  background: var(--error);
+  color: #FFF8FA;
+  border-color: var(--error);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    inset 0 -2px 0 rgba(0,0,0,0.25),
+    0 2px 0 rgba(0,0,0,0.35);
+}
+.btn-danger:hover { filter: brightness(1.08); }
+.btn-sm   { padding: 8px 12px; font-size: 13px; }
+.btn-icon { padding: 10px; }
+.btn-full { width: 100%; }
+
+/* ─── Cards ──────────────────────────────────────────────────────────────────*/
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out);
+}
+.card-elevated { background: var(--bg-elevated); box-shadow: var(--shadow-md); }
+.card-interactive { cursor: pointer; }
+.card-interactive:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent);
+}
+
+/* ─── Badges / Pills ─────────────────────────────────────────────────────────*/
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.badge-dot { width: 6px; height: 6px; background: currentColor; border-radius: 1px; }
+
+.badge-todo {
+  background: color-mix(in oklab, var(--info) 18%, transparent);
+  color: var(--info);
+  border-color: color-mix(in oklab, var(--info) 40%, transparent);
+}
+.badge-progress {
+  background: color-mix(in oklab, var(--warning) 18%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 40%, transparent);
+}
+.badge-completed {
+  background: color-mix(in oklab, var(--success) 18%, transparent);
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 40%, transparent);
+}
+.badge-danger {
+  background: color-mix(in oklab, var(--error) 18%, transparent);
+  color: var(--error);
+  border-color: color-mix(in oklab, var(--error) 40%, transparent);
+}
+.badge-neutral {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+/* Difficulty scale: green → red */
+.diff-beginner { background: color-mix(in oklab,#22D45A 15%,transparent); color:#22D45A; border-color:color-mix(in oklab,#22D45A 38%,transparent); }
+.diff-easy     { background: color-mix(in oklab,#7BCF3F 15%,transparent); color:#7BCF3F; border-color:color-mix(in oklab,#7BCF3F 38%,transparent); }
+.diff-medium   { background: color-mix(in oklab,#FFB020 15%,transparent); color:#FFB020; border-color:color-mix(in oklab,#FFB020 38%,transparent); }
+.diff-hard     { background: color-mix(in oklab,#FF7A3C 15%,transparent); color:#FF7A3C; border-color:color-mix(in oklab,#FF7A3C 38%,transparent); }
+.diff-expert   { background: color-mix(in oklab,#FF4455 15%,transparent); color:#FF4455; border-color:color-mix(in oklab,#FF4455 38%,transparent); }
+
+[data-theme="blossom"] .diff-beginner { color:#4A9460; border-color:color-mix(in oklab,#4A9460 45%,transparent); background:color-mix(in oklab,#4A9460 14%,transparent); }
+[data-theme="blossom"] .diff-easy     { color:#6B9A3F; border-color:color-mix(in oklab,#6B9A3F 45%,transparent); background:color-mix(in oklab,#6B9A3F 14%,transparent); }
+[data-theme="blossom"] .diff-medium   { color:#C97A3A; border-color:color-mix(in oklab,#C97A3A 45%,transparent); background:color-mix(in oklab,#C97A3A 14%,transparent); }
+[data-theme="blossom"] .diff-hard     { color:#B45A35; border-color:color-mix(in oklab,#B45A35 45%,transparent); background:color-mix(in oklab,#B45A35 14%,transparent); }
+[data-theme="blossom"] .diff-expert   { color:#C43A50; border-color:color-mix(in oklab,#C43A50 45%,transparent); background:color-mix(in oklab,#C43A50 14%,transparent); }
+
+/* ─── Tabs — blocky nav ──────────────────────────────────────────────────────*/
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.tab {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.tab.active {
+  color: var(--text-inverse);
+  background: var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    inset 0 -2px 0 rgba(0,0,0,0.18);
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────────────────────*/
+.input, .textarea, .select {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 10px 14px;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+  outline: none;
+}
+.input::placeholder, .textarea::placeholder { color: var(--text-muted); }
+.input:focus, .textarea:focus, .select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+  background: var(--bg-card);
+}
+
+/* ─── Chunky progress bar ────────────────────────────────────────────────────*/
+.chunky-progress {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+}
+.chunky-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--accent) 0 6px,
+      color-mix(in oklab, var(--accent) 78%, #000) 6px 8px
+    );
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.25);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* ─── Layout utilities ───────────────────────────────────────────────────────*/
+.pn-stack { display: flex; flex-direction: column; }
+.pn-row   { display: flex; align-items: center; }
+.pn-divider { height: 1px; background: var(--border); border: 0; margin: 24px 0; }
+.scroll-x { overflow-x: auto; }
+.scroll-x::-webkit-scrollbar { height: 6px; }
+.scroll-x::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
