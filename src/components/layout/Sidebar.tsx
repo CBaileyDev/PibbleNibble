@@ -1,110 +1,145 @@
 /**
  * components/layout/Sidebar.tsx
  *
- * Primary navigation sidebar. Collapses on mobile; always visible on desktop.
- * Nav items are defined inline to keep routing and labels co-located here.
+ * Primary navigation sidebar. Fixed left column, full viewport height.
+ *
+ * Driven by props (no router/store coupling) — the parent passes the active
+ * route and receives navigation intents via onNavigate. Collapse state is
+ * internal, toggled via the chevron at the top of the rail.
+ *
+ * Styled with CSS custom properties from globals.css (shared design system).
  */
 
-import { NavLink } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useMemo, useState } from 'react'
 import {
   LayoutDashboard,
   Wand2,
   BookOpen,
   CheckSquare,
-  Map,
+  BarChart2,
+  Bookmark,
   Settings,
   ChevronLeft,
+  type LucideIcon,
 } from 'lucide-react'
-import { useUIStore } from '@/stores/uiStore'
+import styles from './Sidebar.module.css'
+
+interface SidebarUser {
+  name: string
+  theme: 'deepslate' | 'blossom'
+}
+
+export interface SidebarProps {
+  currentRoute: string
+  user: SidebarUser
+  onNavigate: (route: string) => void
+}
 
 interface NavItem {
-  to: string
+  route: string
   label: string
-  icon: React.ReactNode
+  Icon: LucideIcon
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',               label: 'Dashboard',     icon: <LayoutDashboard size={18} /> },
-  { to: '/build-designer', label: 'Build Designer', icon: <Wand2 size={18} /> },
-  { to: '/saved-builds',   label: 'Saved Builds',   icon: <BookOpen size={18} /> },
-  { to: '/progress',       label: 'Progress',        icon: <CheckSquare size={18} /> },
-  { to: '/world-notes',    label: 'World Notes',     icon: <Map size={18} /> },
-  { to: '/settings',       label: 'Settings',        icon: <Settings size={18} /> },
+  { route: '/',                label: 'Dashboard',      Icon: LayoutDashboard },
+  { route: '/build-designer',  label: 'Build Designer', Icon: Wand2 },
+  { route: '/my-builds',       label: 'My Builds',      Icon: BookOpen },
+  { route: '/checklists',      label: 'Checklists',     Icon: CheckSquare },
+  { route: '/progress',        label: 'Progress',       Icon: BarChart2 },
+  { route: '/saved',           label: 'Saved',          Icon: Bookmark },
+  { route: '/settings',        label: 'Settings',       Icon: Settings },
 ]
 
-export function Sidebar() {
-  const { sidebarOpen, toggleSidebar } = useUIStore()
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
+export function Sidebar({ currentRoute, user, onNavigate }: SidebarProps) {
+  const [collapsed, setCollapsed] = useState(false)
+  const initials = useMemo(() => getInitials(user.name), [user.name])
+  const themeDotColor = user.theme === 'blossom' ? '#E0446A' : '#00CCFF'
 
   return (
-    <motion.aside
-      animate={{ width: sidebarOpen ? 240 : 60 }}
-      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-      className="relative flex flex-col h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] overflow-hidden shrink-0"
+    <aside
+      className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}
+      data-collapsed={collapsed}
+      aria-label="Primary"
     >
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)]">
-        <span className="text-xl shrink-0">⛏️</span>
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.span
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.15 }}
-              className="font-semibold text-sm text-[var(--text-primary)] whitespace-nowrap"
-            >
-              Pibble &amp; Nibble
-            </motion.span>
+      {/* ── Header: logo + collapse toggle ─────────────────────────── */}
+      <div className={styles.header}>
+        <div className={styles.logo}>
+          <span className={styles.logoBlock} aria-hidden="true">
+            <span className={styles.logoPixel} />
+            <span className={styles.logoPixel} />
+            <span className={styles.logoPixel} />
+            <span className={styles.logoPixel} />
+          </span>
+          {!collapsed && (
+            <span className={styles.logoText}>Pibble &amp; Nibble</span>
           )}
-        </AnimatePresence>
+        </div>
+
+        <button
+          type="button"
+          className={styles.collapseBtn}
+          onClick={() => setCollapsed((v) => !v)}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+        >
+          <ChevronLeft
+            size={16}
+            style={{
+              transform: collapsed ? 'rotate(180deg)' : 'none',
+              transition: 'transform var(--dur-base) var(--ease-out)',
+            }}
+          />
+        </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-3 px-2 flex flex-col gap-0.5 overflow-y-auto">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-3 px-2 h-9 rounded-[var(--radius-md)] transition-colors duration-150',
-                isActive
-                  ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]',
-              ].join(' ')
-            }
-            title={!sidebarOpen ? item.label : undefined}
-          >
-            <span className="shrink-0">{item.icon}</span>
-            <AnimatePresence>
-              {sidebarOpen && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.1 }}
-                  className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                >
-                  {item.label}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </NavLink>
-        ))}
+      {/* ── Navigation ─────────────────────────────────────────────── */}
+      <nav className={styles.nav}>
+        {NAV_ITEMS.map(({ route, label, Icon }) => {
+          const isActive = currentRoute === route
+          return (
+            <button
+              key={route}
+              type="button"
+              className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+              onClick={() => onNavigate(route)}
+              title={collapsed ? label : undefined}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <span className={styles.navIcon}>
+                <Icon size={18} />
+              </span>
+              {!collapsed && <span className={styles.navLabel}>{label}</span>}
+            </button>
+          )
+        })}
       </nav>
 
-      {/* Collapse toggle */}
-      <button
-        onClick={toggleSidebar}
-        className="flex items-center justify-center h-10 border-t border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface)] transition-colors"
-        aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-      >
-        <motion.span animate={{ rotate: sidebarOpen ? 0 : 180 }} transition={{ duration: 0.2 }}>
-          <ChevronLeft size={16} />
-        </motion.span>
-      </button>
-    </motion.aside>
+      {/* ── User section ───────────────────────────────────────────── */}
+      <div className={styles.user}>
+        <span className={styles.avatar} aria-hidden="true">
+          {initials}
+        </span>
+        {!collapsed && (
+          <div className={styles.userMeta}>
+            <span className={styles.userName}>{user.name}</span>
+            <span className={styles.userTheme}>
+              <span
+                className={styles.themeDot}
+                style={{ backgroundColor: themeDotColor }}
+              />
+              <span className={styles.themeLabel}>{user.theme}</span>
+            </span>
+          </div>
+        )}
+      </div>
+    </aside>
   )
 }
