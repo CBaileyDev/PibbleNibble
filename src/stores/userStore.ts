@@ -14,9 +14,11 @@ import type { Theme } from '@/types/user'
 interface UserState {
   user: SessionUser | null
   theme: Theme
+  textured: boolean
 
   setUser: (user: SessionUser | null) => void
   setTheme: (theme: Theme) => void
+  setTextured: (v: boolean) => void
   clearUser: () => void
 }
 
@@ -25,6 +27,7 @@ export const useUserStore = create<UserState>()(
     (set) => ({
       user: null,
       theme: 'deepslate',
+      textured: true,
 
       setUser: (user) =>
         set({ user, theme: user?.profile.theme ?? 'deepslate' }),
@@ -35,11 +38,13 @@ export const useUserStore = create<UserState>()(
           user: s.user ? { ...s.user, profile: { ...s.user.profile, theme } } : null,
         })),
 
+      setTextured: (textured) => set({ textured }),
+
       clearUser: () => set({ user: null, theme: 'deepslate' }),
     }),
     {
       name: 'pibble-user',
-      partialize: (s) => ({ theme: s.theme }),
+      partialize: (s) => ({ theme: s.theme, textured: s.textured }),
     }
   )
 )

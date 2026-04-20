@@ -19,16 +19,20 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const theme = useUserStore((s) => s.theme)
+  const textured = useUserStore((s) => s.textured)
 
   useEffect(() => {
     const root = document.documentElement
-
     if (theme === 'blossom') {
       root.setAttribute('data-theme', 'blossom')
     } else {
       root.removeAttribute('data-theme')
     }
   }, [theme])
+
+  useEffect(() => {
+    document.body.classList.toggle('textured', textured)
+  }, [textured])
 
   return <>{children}</>
 }

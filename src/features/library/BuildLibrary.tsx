@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { BuildCard } from '@/components/build/BuildCard'
 import { useBuilds } from '@/hooks/useBuilds'
+import { toBuildDisplay } from '@/lib/buildDisplay'
+import { MOCK_BUILDS } from '@/lib/mockBuilds'
 import type { BuildCategory, Difficulty } from '@/types/build'
 
 const CATEGORY_FILTER_OPTIONS = [
@@ -47,7 +49,8 @@ export function BuildLibrary() {
   const [sortBy, setSortBy] = useState('updated_at')
 
   const filtered = useMemo(() => {
-    let result = [...builds]
+    const source = builds.length > 0 ? builds : []
+    let result = [...source]
 
     if (search) {
       const q = search.toLowerCase()
@@ -70,6 +73,10 @@ export function BuildLibrary() {
 
     return result
   }, [builds, search, category, difficulty, sortBy])
+
+  const displayBuilds = filtered.length > 0
+    ? filtered.map(toBuildDisplay)
+    : isLoading ? [] : MOCK_BUILDS
 
   return (
     <div className="flex flex-col gap-5">
@@ -123,7 +130,7 @@ export function BuildLibrary() {
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-          {filtered.map((build) => (
+          {displayBuilds.map((build) => (
             <BuildCard key={build.id} build={build} />
           ))}
         </div>

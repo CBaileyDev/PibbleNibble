@@ -1,95 +1,111 @@
-/**
- * components/build/BuildCard.tsx
- *
- * Compact card shown in the Saved Builds grid. Displays title, category
- * badge, difficulty, a progress ring for material gathering, and favorite toggle.
- */
-
-import { Link } from 'react-router-dom'
-import { Heart } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import { PaletteStrip } from '@/components/ui/PaletteStrip'
+import { ChunkyProgress } from '@/components/ui/ChunkyProgress'
+import { DiffBadge } from '@/components/ui/DiffBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { computeChecklistProgress } from '@/hooks/useMaterialChecklist'
-import { useToggleFavorite } from '@/hooks/useBuilds'
-import type { MinecraftBuild } from '@/types/build'
+import { Button } from '@/components/ui/Button'
+import type { BuildDisplayData } from '@/types/display'
 
 interface BuildCardProps {
-  build: MinecraftBuild
+  build: BuildDisplayData
+  compact?: boolean
+  onClick?: () => void
 }
 
-const DIFFICULTY_VARIANT = {
-  easy:   'success',
-  medium: 'warning',
-  hard:   'danger',
-  expert: 'danger',
-} as const
+export function BuildCard({ build, compact = false, onClick }: BuildCardProps) {
+  const navigate = useNavigate()
+  const { name, palette, difficulty, progression, biome, dims, steps, status, progress } = build
+  const isProgress = status === 'in-progress'
+  const isCompleted = status === 'completed'
 
-export function BuildCard({ build }: BuildCardProps) {
-  const { mutate: toggleFavorite } = useToggleFavorite()
-  const progress = computeChecklistProgress(build)
-
-  function handleFavorite(e: React.MouseEvent) {
-    e.preventDefault()
-    toggleFavorite({ id: build.id, isFavorite: !build.isFavorite })
+  function handleClick() {
+    if (onClick) { onClick(); return }
+    if (build.id && !build.id.startsWith('r') && !['mossy-oak-cottage','lantern-tower','koi-pond','deepslate-vault','cherry-bridge','obsidian-spire'].includes(build.id)) {
+      navigate(`/builds/${build.id}`)
+    }
   }
 
+  const overlayBadge = status !== 'todo' ? <StatusBadge status={status} /> : undefined
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18 }}
+    <Card
+      interactive
+      style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+      onClick={handleClick}
     >
-      <Link to={`/builds/${build.id}`}>
-        <Card interactive className="flex flex-col gap-3 p-4 h-full">
-          {/* Cover image placeholder */}
-          <div className="rounded-[var(--radius-md)] aspect-video bg-[var(--bg-tertiary)] flex items-center justify-center text-3xl overflow-hidden">
-            {build.imageUrl ? (
-              <img src={build.imageUrl} alt={build.title} className="w-full h-full object-cover" />
-            ) : (
-              <span>⛏️</span>
-            )}
+      <PaletteStrip colors={palette} height={compact ? 24 : 32} overlay={overlayBadge} />
+
+      <div
+        style={{
+          padding: compact ? '14px 16px 16px' : '18px 20px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: compact ? 10 : 14,
+          flex: 1,
+        }}
+      >
+        {/* Name + badges */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-display)',
+              fontWeight: 600,
+              fontSize: compact ? 17 : 22,
+              lineHeight: 1.25,
+              letterSpacing: '0.03em',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {name}
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <DiffBadge level={difficulty} />
+            <span className="badge badge-neutral">{progression}</span>
+            {biome && !compact && <span className="badge badge-neutral">{biome}</span>}
           </div>
+        </div>
 
-          <div className="flex flex-col gap-2 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)] line-clamp-2 leading-snug">
-                {build.title}
-              </h3>
-              <button
-                onClick={handleFavorite}
-                className="shrink-0 p-0.5 text-[var(--text-muted)] hover:text-pink-400 transition-colors"
-                aria-label={build.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                <Heart
-                  size={14}
-                  className={build.isFavorite ? 'fill-pink-400 text-pink-400' : ''}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Badge variant="default">{build.category}</Badge>
-              <Badge variant={DIFFICULTY_VARIANT[build.difficulty]}>{build.difficulty}</Badge>
-              {build.isAiGenerated && <Badge variant="accent">AI</Badge>}
-            </div>
-
-            {/* Material progress bar */}
-            <div className="mt-auto pt-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-[var(--text-muted)]">Materials</span>
-                <span className="text-xs text-[var(--text-muted)]">{progress}%</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-[var(--border)]">
-                <div
-                  className="h-full rounded-full bg-[var(--accent)] transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
+        {/* Dims / steps (hidden in compact) */}
+        {!compact && (
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              color: 'var(--text-muted)',
+            }}
+          >
+            {dims} blocks · {steps} steps
           </div>
-        </Card>
-      </Link>
-    </motion.div>
+        )}
+
+        {/* Progress bar for in-progress builds */}
+        {isProgress && progress && (
+          <ChunkyProgress value={progress.current} max={progress.total} />
+        )}
+
+        {/* Footer actions */}
+        <div style={{ marginTop: 'auto', paddingTop: compact ? 4 : 8 }}>
+          {status === 'todo' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Button variant="primary" full>
+                Start Project →
+              </Button>
+            </div>
+          )}
+          {isProgress && (
+            <Button variant="primary" full>
+              Continue →
+            </Button>
+          )}
+          {isCompleted && (
+            <Button variant="secondary" full>
+              View Details
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }

@@ -18,7 +18,7 @@ export function PageLayout({ children, flush = false }: PageLayoutProps) {
   return (
     <motion.div
       className={[
-        'flex-1 overflow-y-auto',
+        'flex-1',
         flush ? '' : 'px-6 py-6',
       ].join(' ')}
       initial={{ opacity: 0, y: 8 }}

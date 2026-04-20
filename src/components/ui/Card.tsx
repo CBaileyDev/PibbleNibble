@@ -1,11 +1,3 @@
-/**
- * components/ui/Card.tsx
- *
- * Surface container used for build cards, stat panels, and modals.
- * The `elevated` prop adds a subtle lift shadow; `interactive` adds
- * hover styles for clickable cards.
- */
-
 import { type ReactNode, type HTMLAttributes } from 'react'
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
@@ -24,13 +16,13 @@ export function Card({
   return (
     <div
       className={[
-        'rounded-[var(--radius-lg)] border border-[var(--border)]',
-        elevated ? 'bg-[var(--surface-raised)]' : 'bg-[var(--surface)]',
-        interactive
-          ? 'cursor-pointer transition-all duration-150 hover:border-[var(--accent)] hover:shadow-md'
-          : '',
+        'card',
+        elevated ? 'card-elevated' : '',
+        interactive ? 'card-interactive' : '',
         className,
-      ].join(' ')}
+      ]
+        .filter(Boolean)
+        .join(' ')}
       {...props}
     >
       {children}
@@ -38,22 +30,31 @@ export function Card({
   )
 }
 
-/** Convenience sub-components for structured card layouts. */
 export function CardHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`px-5 pt-5 pb-3 border-b border-[var(--border-subtle)] ${className}`}>
+    <div
+      className={className}
+      style={{ padding: '20px 20px 12px', borderBottom: '1px solid var(--border)' }}
+    >
       {children}
     </div>
   )
 }
 
 export function CardBody({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`px-5 py-4 ${className}`}>{children}</div>
+  return (
+    <div className={className} style={{ padding: '16px 20px' }}>
+      {children}
+    </div>
+  )
 }
 
 export function CardFooter({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`px-5 pb-5 pt-3 border-t border-[var(--border-subtle)] ${className}`}>
+    <div
+      className={className}
+      style={{ padding: '12px 20px 20px', borderTop: '1px solid var(--border)' }}
+    >
       {children}
     </div>
   )
