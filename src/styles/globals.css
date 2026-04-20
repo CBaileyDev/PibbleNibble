@@ -11,30 +11,41 @@
 
 /* ─── Tailwind v4 custom theme tokens ────────────────────────────────────────
    These extend Tailwind's utility palette so you can write classes like
-   bg-surface, text-accent, border-subtle, etc.
+   bg-bg-base, text-accent, border-border, etc.
+   All values resolve at runtime from the CSS vars defined in :root / [data-theme].
    ──────────────────────────────────────────────────────────────────────────── */
 @theme {
   /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Semantic color aliases — resolved from CSS vars below at runtime */
-  --color-bg-primary: var(--bg-primary);
-  --color-bg-secondary: var(--bg-secondary);
-  --color-bg-tertiary: var(--bg-tertiary);
-  --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-border: var(--border);
-  --color-border-subtle: var(--border-subtle);
-  --color-text-primary: var(--text-primary);
+  /* Backgrounds */
+  --color-bg-base:     var(--bg-base);
+  --color-bg-surface:  var(--bg-surface);
+  --color-bg-card:     var(--bg-card);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-hover:    var(--bg-hover);
+
+  /* Borders */
+  --color-border:        var(--border);
+  --color-border-strong: var(--border-strong);
+
+  /* Text */
+  --color-text-primary:   var(--text-primary);
   --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
+  --color-text-muted:     var(--text-muted);
+  --color-text-inverse:   var(--text-inverse);
+
+  /* Accent */
+  --color-accent:        var(--accent);
+  --color-accent-hover:  var(--accent-hover);
   --color-accent-subtle: var(--accent-subtle);
+
+  /* Status */
   --color-success: var(--success);
   --color-warning: var(--warning);
-  --color-danger: var(--danger);
+  --color-error:   var(--error);
+  --color-info:    var(--info);
 
   /* Radius */
   --radius-sm: 4px;
@@ -47,77 +58,121 @@
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ─── Deepslate dark theme (default) ─────────────────────────────────────────
-   Inspired by Minecraft's deepslate & polished blackstone palette.
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ============================================================
+   THEME 1: DEEPSLATE
+   Near-void darkness. Obsidian base. Electric cyan edge.
+   Inspired by: Minecraft deepslate, netherite, the End
+   ============================================================ */
 :root {
   color-scheme: dark;
 
-  /* Backgrounds */
-  --bg-primary:    #0f0f12;
-  --bg-secondary:  #16161a;
-  --bg-tertiary:   #1e1e24;
+  /* --- Backgrounds (true underground darkness) --- */
+  --bg-base:     #070A0F;   /* Near-void: deepest underground */
+  --bg-surface:  #0D1219;   /* Deepslate surface */
+  --bg-card:     #131A26;   /* Dark slate card */
+  --bg-elevated: #1A2436;   /* Floating panels, dropdowns */
+  --bg-hover:    #212E42;   /* Interactive hover */
 
-  /* Surfaces (cards, panels) */
-  --surface:       #222228;
-  --surface-raised:#2a2a32;
+  /* --- Borders --- */
+  --border:        #1F2D42; /* Subtle, dark slate */
+  --border-strong: #2E4260; /* Visible dividers */
 
-  /* Borders */
-  --border:        #35353f;
-  --border-subtle: #2a2a32;
+  /* --- Text (blue-white, premium & crisp) --- */
+  --text-primary:   #E2ECFF; /* Cold white with blue tint */
+  --text-secondary: #6B88AA; /* Slate blue-gray */
+  --text-muted:     #3D5570; /* Deep muted slate */
+  --text-inverse:   #070A0F; /* For use on accent backgrounds */
 
-  /* Text */
-  --text-primary:  #e8e8ec;
-  --text-secondary:#a8a8b8;
-  --text-muted:    #6b6b7e;
+  /* --- Accent: Electric Cyan (diamond/deepslate gem energy) --- */
+  --accent:        #00CCFF;
+  --accent-hover:  #33D9FF;
+  --accent-subtle: rgba(0, 204, 255, 0.08);
 
-  /* Accent — muted cobalt/slate-blue */
-  --accent:        #6d83f2;
-  --accent-hover:  #8296f5;
-  --accent-subtle: rgba(109, 131, 242, 0.15);
+  /* --- Status Colors --- */
+  --success: #22D45A; /* Vivid green */
+  --warning: #FFB020; /* Netherite gold */
+  --error:   #FF4455; /* Nether red */
+  --info:    #5BA4CF; /* Icy blue */
 
-  /* Semantic */
-  --success:       #4ade80;
-  --warning:       #fbbf24;
-  --danger:        #f87171;
+  /* --- Buttons --- */
+  --btn-primary-bg:     #00CCFF;
+  --btn-primary-text:   #070A0F;
+  --btn-secondary-bg:   #131A26;
+  --btn-secondary-text: #E2ECFF;
 
-  /* Sidebar width */
+  /* --- Shadows (deep and inky) --- */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.70);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.85);
+  --shadow-lg: 0 16px 56px rgba(0, 0, 0, 1.00);
+
+  /* --- Sidebar width --- */
   --sidebar-width: 240px;
+
+  /* --- Backward-compat aliases (existing components reference these) --- */
+  --bg-primary:    var(--bg-base);
+  --bg-secondary:  var(--bg-surface);
+  --bg-tertiary:   var(--bg-card);
+  --surface:       var(--bg-card);
+  --surface-raised:var(--bg-elevated);
+  --border-subtle: var(--border);
+  --danger:        var(--error);
 }
 
-/* ─── Blossom pink theme ──────────────────────────────────────────────────────
-   Soft cherry-blossom palette. Applied when html[data-theme="blossom"].
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ============================================================
+   THEME 2: BLOSSOM
+   Cherry petal pink. Warm rose. Soft lavender edge.
+   Inspired by: Minecraft cherry blossom biome, azaleas
+   ============================================================ */
 [data-theme="blossom"] {
   color-scheme: light;
 
-  /* Backgrounds */
-  --bg-primary:    #fdf0f5;
-  --bg-secondary:  #fae6ef;
-  --bg-tertiary:   #f5d9e8;
+  /* --- Backgrounds (pink-tinted all the way through) --- */
+  --bg-base:     #FDF1F4;   /* Pale cherry petal */
+  --bg-surface:  #F8E4EC;   /* Soft blush surface */
+  --bg-card:     #FDF4F7;   /* Lifted rose-white */
+  --bg-elevated: #FFF8FA;   /* Floating panels */
+  --bg-hover:    #F2D4DF;   /* Deeper blush hover */
 
-  /* Surfaces */
-  --surface:       #ffffff;
-  --surface-raised:#fff5f9;
+  /* --- Borders --- */
+  --border:        #EABFCB; /* Rose petal border */
+  --border-strong: #D496AE; /* Deeper rose divider */
 
-  /* Borders */
-  --border:        #e8b4cc;
-  --border-subtle: #f2d0e0;
+  /* --- Text (deep rose-wine, warm & legible) --- */
+  --text-primary:   #3C1A27; /* Deep rose-wine */
+  --text-secondary: #8B4D63; /* Medium dusty rose */
+  --text-muted:     #B07A8A; /* Muted blush */
+  --text-inverse:   #FFF8FA; /* For use on accent backgrounds */
 
-  /* Text */
-  --text-primary:  #2d1b25;
-  --text-secondary:#6b3d52;
-  --text-muted:    #a06880;
+  /* --- Accent: Cherry Blossom Deep Pink --- */
+  --accent:        #E0446A;
+  --accent-hover:  #E85F7C;
+  --accent-subtle: rgba(224, 68, 106, 0.10);
 
-  /* Accent — vibrant cherry-pink */
-  --accent:        #d63f7a;
-  --accent-hover:  #b8305f;
-  --accent-subtle: rgba(214, 63, 122, 0.12);
+  /* --- Status Colors (warm-toned to stay cohesive) --- */
+  --success: #4A9460; /* Sage green */
+  --warning: #C97A3A; /* Warm amber */
+  --error:   #C43A50; /* Deep red */
+  --info:    #6B88C8; /* Lavender-blue */
 
-  /* Semantic */
-  --success:       #16a34a;
-  --warning:       #d97706;
-  --danger:        #dc2626;
+  /* --- Buttons --- */
+  --btn-primary-bg:     #E0446A;
+  --btn-primary-text:   #FFF8FA;
+  --btn-secondary-bg:   #F8E4EC;
+  --btn-secondary-text: #3C1A27;
+
+  /* --- Shadows (pink-tinted softness) --- */
+  --shadow-sm: 0 1px 4px  rgba(180, 50, 80, 0.12);
+  --shadow-md: 0 4px 20px rgba(180, 50, 80, 0.18);
+  --shadow-lg: 0 16px 56px rgba(180, 50, 80, 0.28);
+
+  /* --- Backward-compat aliases (existing components reference these) --- */
+  --bg-primary:    var(--bg-base);
+  --bg-secondary:  var(--bg-surface);
+  --bg-tertiary:   var(--bg-card);
+  --surface:       var(--bg-card);
+  --surface-raised:var(--bg-elevated);
+  --border-subtle: var(--border);
+  --danger:        var(--error);
 }
 
 /* ─── Base resets ─────────────────────────────────────────────────────────────*/
@@ -129,7 +184,7 @@
 
 html {
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
+  background-color: var(--bg-base);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
