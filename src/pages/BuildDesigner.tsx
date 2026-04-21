@@ -1,9 +1,10 @@
 /**
  * pages/BuildDesigner.tsx
  *
- * The AI build generator page. Users fill in the BuildDesignerForm;
- * on submit the BuildGeneratingOverlay shows while Claude produces
- * variations. When generation settles, we navigate to BuildResults.
+ * The AI build generator page. Users fill in the BuildDesignerForm; on
+ * submit we invoke the `generate-build` Supabase Edge Function (which runs
+ * Claude server-side), then navigate to BuildResults with the returned
+ * variations. The overlay stays visible until the promise settles.
  */
 
 import { useState } from 'react'
@@ -13,26 +14,30 @@ import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { BuildDesignerForm } from '@/components/build/BuildDesignerForm'
 import { BuildGeneratingOverlay, usePhaseCycler } from '@/components/ui/LoadingStates'
+import { toast } from '@/components/ui/Toast'
+import { generateBuilds } from '@/lib/anthropic'
 import type { BuildDesignerInput } from '@/types/build'
 
-const GENERATION_MS = 15000
+/** Rough expected wall-clock for the overlay's phase cycler animation. */
+const OVERLAY_PHASE_MS = 15000
 
 export function BuildDesigner() {
   const navigate = useNavigate()
   const [generating, setGenerating] = useState(false)
-  const phase = usePhaseCycler(generating, GENERATION_MS)
+  const phase = usePhaseCycler(generating, OVERLAY_PHASE_MS)
 
-  function handleSubmit(data: BuildDesignerInput) {
+  async function handleSubmit(data: BuildDesignerInput) {
     if (generating) return
     setGenerating(true)
-    // The actual generation pipeline (lib/buildEngine/generator.ts) runs
-    // server-side via a Supabase Edge Function. Until that's wired in, the
-    // overlay plays its phase cycle, then we hand off to BuildResults so it
-    // can either render the returned batch or fall through to its empty state.
-    window.setTimeout(() => {
+    try {
+      const { builds } = await generateBuilds(data)
+      navigate('/build-results', { state: { builds, input: data } })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Generation failed.'
+      toast.error(message)
+    } finally {
       setGenerating(false)
-      navigate('/build-results', { state: { builds: [], input: data } })
-    }, GENERATION_MS)
+    }
   }
 
   return (
@@ -53,7 +58,7 @@ export function BuildDesigner() {
           </div>
 
           <SectionCard title="Describe Your Build">
-            <BuildDesignerForm onSubmit={handleSubmit} isLoading={generating} />
+            <BuildDesignerForm onSubmit={(data) => void handleSubmit(data)} isLoading={generating} />
           </SectionCard>
 
           {/* Tips */}
@@ -69,7 +74,7 @@ export function BuildDesigner() {
         </div>
       </PageLayout>
 
-      <BuildGeneratingOverlay isVisible={generating} phase={phase} durationMs={GENERATION_MS} />
+      <BuildGeneratingOverlay isVisible={generating} phase={phase} durationMs={OVERLAY_PHASE_MS} />
     </>
   )
 }
