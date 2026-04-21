@@ -513,80 +513,63 @@ export interface MinecraftBuild {
 //  BUILD DESIGNER INPUT (form → AI)
 // ---------------------------------------------------------------------------
 
+/** Functional category of build chosen in the designer form. */
+export type BuildType = Purpose;
+
+/** Visual / architectural flavour chosen in the designer form. */
+export type BuildTheme = Theme;
+
+/** Biome target chosen in the designer form. */
+export type BiomeType = Biome;
+
+/** Footprint bucket chosen in the designer form. */
+export type BuildSize = "tiny" | "small" | "medium" | "large";
+
 /**
  * What the user-facing form submits to the AI generation endpoint.
  *
- * Every field is optional except `theme` and `purpose`, giving the AI
- * maximum creative freedom while still respecting explicit constraints.
+ * `buildType`, `theme`, `size`, `difficulty`, and `progression` are required —
+ * everything else tunes the result.
  */
 export interface BuildDesignerInput {
-  /** Desired architectural theme. */
-  theme: Theme;
+  /** Functional category: house, cottage, castle, etc. */
+  buildType: BuildType;
 
-  /** Desired functional purpose. */
-  purpose: Purpose;
+  /** Visual / architectural theme. */
+  theme: BuildTheme;
+
+  /** Footprint bucket. */
+  size: BuildSize;
+
+  /** Execution difficulty ceiling. */
+  difficulty: Difficulty;
+
+  /** Survival-mode progression stage. */
+  progression: ProgressionLevel;
 
   /**
-   * Target biome. If omitted, the AI picks one that fits the theme.
-   * @default undefined
+   * Biome vibes the build should suit.
+   * Multi-select — empty / omitted means the AI chooses.
    */
-  biome?: Biome;
+  biome?: BiomeType[];
 
   /**
-   * Maximum difficulty the user is comfortable with.
-   * AI should produce at or below this ceiling.
-   * @default "medium"
+   * Free-form list of blocks the user wants to see.
+   * @example "spruce wood, stone bricks, copper"
    */
-  maxDifficulty?: Difficulty;
+  preferredBlocks?: string;
 
   /**
-   * Player's current progression stage.
-   * AI must not require materials beyond this gate.
-   * @default "mid"
-   */
-  progressionLevel?: ProgressionLevel;
-
-  /**
-   * Soft cap on width × depth footprint (in blocks).
-   * AI treats this as a guideline, not a hard wall.
-   * @example { maxWidth: 15, maxDepth: 15 }
-   */
-  footprintConstraint?: {
-    maxWidth?: number;
-    maxDepth?: number;
-  };
-
-  /**
-   * Soft cap on build height in blocks.
-   * @default undefined (AI decides)
-   */
-  maxHeight?: number;
-
-  /**
-   * Blocks the user explicitly wants included.
-   * @example ["minecraft:cherry_log", "minecraft:lantern"]
-   */
-  preferredBlocks?: string[];
-
-  /**
-   * Blocks the user wants excluded (resource limits, aesthetics).
-   * @example ["minecraft:netherite_block"]
-   */
-  excludedBlocks?: string[];
-
-  /**
-   * Freeform prompt for flavour / special requests.
-   * Max 500 characters. The AI interprets this creatively.
+   * Free-form notes for the AI.
    * @example "I want a secret room behind a painting"
    */
-  additionalNotes?: string;
+  specialRequests?: string;
 
   /**
-   * Target real-world build time in minutes.
-   * AI uses this to scope the design.
-   * @default undefined
+   * How many distinct build variations the AI should return.
+   * 1–5, defaulting to 3.
    */
-  targetMinutes?: number;
+  variationCount: number;
 }
 
 // ---------------------------------------------------------------------------
