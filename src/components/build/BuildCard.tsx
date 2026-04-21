@@ -1,111 +1,389 @@
-import { useNavigate } from 'react-router-dom'
-import { PaletteStrip } from '@/components/ui/PaletteStrip'
-import { ChunkyProgress } from '@/components/ui/ChunkyProgress'
-import { DiffBadge } from '@/components/ui/DiffBadge'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import type { BuildDisplayData } from '@/types/display'
+/**
+ * components/build/BuildCard.tsx
+ *
+ * Library card for a saved build. Renders a palette strip, name,
+ * status + difficulty + progression tags, an optional progress bar,
+ * and a set of action buttons that vary by state.
+ *
+ * States:
+ *   • saved-only  → no project attached; shows View + Save + Delete
+ *   • in-progress → project.status === 'in-progress'; shows Continue + View + Delete
+ *   • completed   → project.status === 'done' | 'completed'; shows View + Delete
+ */
 
-interface BuildCardProps {
-  build: BuildDisplayData
-  compact?: boolean
-  onClick?: () => void
+import { type CSSProperties } from 'react'
+import { Eye, Play, Trash2, Bookmark, ArrowRight } from 'lucide-react'
+import type { MinecraftBuild } from '@/types/build'
+
+/* ───────────────────────── types ───────────────────────── */
+
+/**
+ * Tracker that pairs a saved build with the user's active attempt.
+ * Mirrors the shape the rest of the app uses (see Dashboard / ActiveProjectCard).
+ */
+export interface BuildProject {
+  id: string
+  buildId: string
+  name?: string
+  status: 'todo' | 'in-progress' | 'done' | 'completed'
+  progress: { current: number; total: number }
+  currentStepText?: string
+  updatedAt?: string
 }
 
-export function BuildCard({ build, compact = false, onClick }: BuildCardProps) {
-  const navigate = useNavigate()
-  const { name, palette, difficulty, progression, biome, dims, steps, status, progress } = build
-  const isProgress = status === 'in-progress'
-  const isCompleted = status === 'completed'
+export interface BuildCardProps {
+  build: MinecraftBuild
+  project?: BuildProject
+  onContinue?: () => void
+  onView: () => void
+  onDelete: () => void
+  onSave?: () => void
+}
 
-  function handleClick() {
-    if (onClick) { onClick(); return }
-    if (build.id && !build.id.startsWith('r') && !['mossy-oak-cottage','lantern-tower','koi-pond','deepslate-vault','cherry-bridge','obsidian-spire'].includes(build.id)) {
-      navigate(`/builds/${build.id}`)
-    }
+/* ───────────────────────── helpers ───────────────────────── */
+
+/** Loose accessor — supports both the formal schema (`name`) and the ambient
+ *  shape used across the app (`title`). */
+function buildName(b: MinecraftBuild): string {
+  const rec = b as unknown as Record<string, unknown>
+  return (rec.name as string) ?? (rec.title as string) ?? 'Untitled Build'
+}
+
+/** Extracts an array of hex colours from whichever palette shape the build uses. */
+function buildPalette(b: MinecraftBuild): string[] {
+  const rec = b as unknown as Record<string, unknown>
+  const p = rec.blockPalette
+  if (Array.isArray(p)) return p as string[]
+  if (p && typeof p === 'object') {
+    const obj = p as { colorHexes?: string[] }
+    if (Array.isArray(obj.colorHexes)) return obj.colorHexes
   }
+  return ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
+}
 
-  const overlayBadge = status !== 'todo' ? <StatusBadge status={status} /> : undefined
+/** Read `progressionLevel` defensively — not every seed includes it. */
+function buildProgression(b: MinecraftBuild): string | undefined {
+  const rec = b as unknown as Record<string, unknown>
+  const v = rec.progressionLevel
+  return typeof v === 'string' ? v : undefined
+}
+
+const PROGRESSION_LABEL: Record<string, string> = {
+  early:   'Early Game',
+  mid:     'Mid Game',
+  late:    'Late Game',
+  endgame: 'Endgame',
+}
+
+const STATUS_CLASS: Record<string, string> = {
+  todo:          'badge-todo',
+  'in-progress': 'badge-progress',
+  done:          'badge-completed',
+  completed:     'badge-completed',
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  todo:          'Saved',
+  'in-progress': 'In Progress',
+  done:          'Completed',
+  completed:     'Completed',
+}
+
+const DIFF_CLASS: Record<string, string> = {
+  beginner: 'diff-beginner',
+  easy:     'diff-easy',
+  medium:   'diff-medium',
+  hard:     'diff-hard',
+  expert:   'diff-expert',
+}
+
+/* ───────────────────────── component ───────────────────────── */
+
+export function BuildCard({
+  build,
+  project,
+  onContinue,
+  onView,
+  onDelete,
+  onSave,
+}: BuildCardProps) {
+  const name = buildName(build)
+  const palette = buildPalette(build)
+  const progression = buildProgression(build)
+  const difficulty = (build.difficulty ?? 'medium') as string
+
+  const isInProgress = project?.status === 'in-progress'
+  const isCompleted  = project?.status === 'done' || project?.status === 'completed'
+  const isSavedOnly  = !project
 
   return (
-    <Card
-      interactive
-      style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-      onClick={handleClick}
-    >
-      <PaletteStrip colors={palette} height={compact ? 24 : 32} overlay={overlayBadge} />
-
-      <div
-        style={{
-          padding: compact ? '14px 16px 16px' : '18px 20px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: compact ? 10 : 14,
-          flex: 1,
-        }}
-      >
-        {/* Name + badges */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h3
+    <article style={rootStyle}>
+      {/* Palette strip */}
+      <div style={paletteStripStyle(palette.length)}>
+        {palette.map((c, i) => (
+          <div
+            key={`${c}-${i}`}
             style={{
-              margin: 0,
-              fontFamily: 'var(--font-display)',
-              fontWeight: 600,
-              fontSize: compact ? 17 : 22,
-              lineHeight: 1.25,
-              letterSpacing: '0.03em',
-              color: 'var(--text-primary)',
+              background: c,
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.25)',
             }}
-          >
-            {name}
-          </h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            <DiffBadge level={difficulty} />
-            <span className="badge badge-neutral">{progression}</span>
-            {biome && !compact && <span className="badge badge-neutral">{biome}</span>}
+          />
+        ))}
+        {project && (
+          <div style={statusOverlayStyle}>
+            <span className={`badge ${STATUS_CLASS[project.status] ?? ''}`}>
+              <span className="badge-dot" />
+              {STATUS_LABEL[project.status] ?? project.status}
+            </span>
           </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div style={bodyStyle}>
+        <h3 style={nameStyle}>{name}</h3>
+
+        <div style={tagRowStyle}>
+          <span className={`badge ${DIFF_CLASS[difficulty] ?? 'badge-neutral'}`}>
+            {capitalize(difficulty)}
+          </span>
+          {progression && (
+            <span className="badge badge-neutral">
+              {PROGRESSION_LABEL[progression] ?? progression}
+            </span>
+          )}
         </div>
 
-        {/* Dims / steps (hidden in compact) */}
-        {!compact && (
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 13,
-              color: 'var(--text-muted)',
-            }}
-          >
-            {dims} blocks · {steps} steps
+        {isInProgress && project && (
+          <div style={progressWrapStyle}>
+            <div style={progressMetaStyle}>
+              <span>Step {project.progress.current} of {project.progress.total}</span>
+              <span style={progressPctStyle}>
+                {Math.round(
+                  (project.progress.current /
+                    Math.max(project.progress.total, 1)) *
+                    100,
+                )}%
+              </span>
+            </div>
+            <div className="chunky-progress">
+              <div
+                className="chunky-progress-fill"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      (project.progress.current /
+                        Math.max(project.progress.total, 1)) *
+                        100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
           </div>
         )}
 
-        {/* Progress bar for in-progress builds */}
-        {isProgress && progress && (
-          <ChunkyProgress value={progress.current} max={progress.total} />
-        )}
+        {/* Action footer */}
+        <div style={footerStyle}>
+          {isSavedOnly && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm btn-full"
+                onClick={onView}
+              >
+                <Eye size={14} aria-hidden />
+                View
+              </button>
+              <div style={secondaryRowStyle}>
+                {onSave && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={onSave}
+                    aria-label="Save build"
+                  >
+                    <Bookmark size={14} aria-hidden />
+                    Save
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={onDelete}
+                  aria-label="Delete build"
+                  style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </div>
+            </>
+          )}
 
-        {/* Footer actions */}
-        <div style={{ marginTop: 'auto', paddingTop: compact ? 4 : 8 }}>
-          {status === 'todo' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Button variant="primary" full>
-                Start Project →
-              </Button>
-            </div>
+          {isInProgress && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm btn-full"
+                onClick={onContinue}
+              >
+                <Play size={14} aria-hidden />
+                Continue
+                <ArrowRight size={14} aria-hidden />
+              </button>
+              <div style={secondaryRowStyle}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={onView}
+                >
+                  View Details
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={onDelete}
+                  aria-label="Delete build"
+                  style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </div>
+            </>
           )}
-          {isProgress && (
-            <Button variant="primary" full>
-              Continue →
-            </Button>
-          )}
+
           {isCompleted && (
-            <Button variant="secondary" full>
-              View Details
-            </Button>
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm btn-full"
+                onClick={onView}
+              >
+                <Eye size={14} aria-hidden />
+                View Details
+              </button>
+              <div style={secondaryRowStyle}>
+                <span style={doneHintStyle}>✓ Build complete</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={onDelete}
+                  aria-label="Delete build"
+                  style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
-    </Card>
+    </article>
   )
+}
+
+/* ───────────────────────── styles ───────────────────────── */
+
+const rootStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--r-md)',
+  boxShadow: 'var(--shadow-sm)',
+  overflow: 'hidden',
+  transition:
+    'transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out)',
+}
+
+function paletteStripStyle(count: number): CSSProperties {
+  return {
+    position: 'relative',
+    display: 'grid',
+    gridTemplateColumns: `repeat(${Math.max(count, 1)}, 1fr)`,
+    height: 36,
+    flexShrink: 0,
+  }
+}
+
+const statusOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  top: 8,
+  right: 8,
+  zIndex: 2,
+}
+
+const bodyStyle: CSSProperties = {
+  padding: '16px 18px 18px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  flex: 1,
+}
+
+const nameStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-display)',
+  fontSize: 19,
+  fontWeight: 600,
+  lineHeight: 1.2,
+  letterSpacing: '0.03em',
+  color: 'var(--text-primary)',
+}
+
+const tagRowStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  alignItems: 'center',
+}
+
+const progressWrapStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+}
+
+const progressMetaStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+  color: 'var(--text-secondary)',
+}
+
+const progressPctStyle: CSSProperties = {
+  color: 'var(--accent)',
+}
+
+const footerStyle: CSSProperties = {
+  marginTop: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  paddingTop: 4,
+}
+
+const secondaryRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+}
+
+const doneHintStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'var(--success)',
+}
+
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 }
