@@ -103,8 +103,13 @@ export function BuildResultCard({ build, onStart, onSave, index }: BuildResultCa
     animationDelay: `${180 + (index ?? 0) * 120}ms`,
   }
 
+  const ariaSummary =
+    `${build.name} — ${difficulty.label} ${build.purpose}, ${progressionLabel}, ${biomeLabel}, ` +
+    `${width}×${depth} footprint, ~${hours} hour${hours === 1 ? '' : 's'} to build.`
+
   return (
     <article
+      aria-label={ariaSummary}
       style={cardStyle}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

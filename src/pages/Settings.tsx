@@ -172,12 +172,12 @@ export function Settings() {
     }
   }
 
-  async function handleClearProgress() {
+  async function handleClearWorldNotes() {
     try {
       await Promise.all(notes.map((n: WorldNote) => deleteNote(n.id)))
-      toast.success('Progress cleared')
+      toast.success('All world notes cleared')
     } catch {
-      toast.error('Failed to clear progress')
+      toast.error('Failed to clear world notes')
     }
   }
 
@@ -506,9 +506,9 @@ export function Settings() {
       <ConfirmModal
         isOpen={confirmClearOpen}
         title="Clear all world notes?"
-        message="This permanently removes every pin you&rsquo;ve saved. This action cannot be undone."
+        message={'This permanently removes every pin you’ve saved. This action cannot be undone.'}
         confirmLabel="Yes, clear everything"
-        onConfirm={() => void handleClearProgress()}
+        onConfirm={() => void handleClearWorldNotes()}
         onClose={() => setConfirmClearOpen(false)}
       />
     </PageLayout>

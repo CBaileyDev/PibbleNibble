@@ -1,9 +1,10 @@
 /**
  * components/instructions/StepCard.tsx
  *
- * A single build step within a phase. Shows step description, optional
- * note, and a checkbox to mark it complete. Completion state persists
- * through the parent useBuild mutation.
+ * A single build step within a phase. Shows step number + description +
+ * optional tip/warning, and a checkbox to mark it complete. Completion
+ * state is passed in (it lives in the per-user BuildProject, not on the
+ * canonical BuildStep) so this component stays a pure view.
  */
 
 import { motion } from 'framer-motion'
@@ -11,45 +12,53 @@ import type { BuildStep } from '@/types/build'
 
 interface StepCardProps {
   step: BuildStep
+  isCompleted: boolean
   onToggle: (stepId: string, completed: boolean) => void
 }
 
-export function StepCard({ step, onToggle }: StepCardProps) {
+export function StepCard({ step, isCompleted, onToggle }: StepCardProps) {
   return (
     <motion.div
       layout
       className={[
         'flex gap-3 p-3 rounded-[var(--radius-md)] border transition-colors duration-150',
-        step.isCompleted
+        isCompleted
           ? 'border-[var(--border-subtle)] bg-[var(--bg-tertiary)] opacity-60'
           : 'border-[var(--border)] bg-[var(--surface)]',
       ].join(' ')}
     >
       <input
         type="checkbox"
-        checked={step.isCompleted}
-        onChange={(e) => onToggle(step.id, e.target.checked)}
+        checked={isCompleted}
+        onChange={(e) => onToggle(step.stepId, e.target.checked)}
         className="mt-0.5 size-4 accent-[var(--accent)] shrink-0 cursor-pointer"
-        aria-label={`Mark step ${step.order + 1} complete`}
+        aria-label={`Mark step ${step.stepNumber} (${step.title}) ${isCompleted ? 'incomplete' : 'complete'}`}
       />
 
       <div className="flex flex-col gap-1 min-w-0">
         <p
           className={[
             'text-sm leading-relaxed',
-            step.isCompleted
+            isCompleted
               ? 'line-through text-[var(--text-muted)]'
               : 'text-[var(--text-primary)]',
           ].join(' ')}
         >
           <span className="text-[var(--text-muted)] mr-2 font-mono text-xs">
-            {String(step.order + 1).padStart(2, '0')}
+            {String(step.stepNumber).padStart(2, '0')}
           </span>
+          <span className="font-semibold">{step.title}</span>
+          <span className="mx-1 text-[var(--text-muted)]">—</span>
           {step.description}
         </p>
 
-        {step.note && (
-          <p className="text-xs text-[var(--text-muted)] italic pl-6">{step.note}</p>
+        {step.tip && (
+          <p className="text-xs text-[var(--text-muted)] italic pl-6">💡 {step.tip}</p>
+        )}
+        {step.warning && (
+          <p className="text-xs pl-6" style={{ color: 'var(--warning, #FFB020)' }}>
+            ⚠️ {step.warning}
+          </p>
         )}
       </div>
     </motion.div>

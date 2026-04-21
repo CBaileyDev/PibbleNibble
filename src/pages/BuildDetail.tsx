@@ -6,7 +6,7 @@
  * steps) comes from `useProject(buildId)`.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
@@ -15,23 +15,25 @@ import { BuildProgressBar } from '@/components/instructions/BuildProgressBar'
 import { PhaseTabBar } from '@/components/instructions/PhaseTabBar'
 import { StepCard } from '@/components/instructions/StepCard'
 import { MaterialChecklist } from '@/components/instructions/MaterialChecklist'
-import { BuildPreview } from '@/components/build/BuildPreview'
 import { EmptyState, InstructionsSkeleton } from '@/components/ui/LoadingStates'
 import { useBuild } from '@/hooks/useBuilds'
 import { useProject } from '@/hooks/useProject'
-
-/** Read either the strict-schema `name` or the ambient `title` field. */
-function readTitle(b: unknown): string {
-  const r = b as Record<string, unknown>
-  return (r.name as string) ?? (r.title as string) ?? 'Untitled Build'
-}
 
 export function BuildDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { build, loading, error } = useBuild(id)
   const { completedSteps, toggleStepComplete } = useProject(id ?? '')
-  const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
+  const [activePhaseId, setActivePhaseId] = useState<number | null>(null)
+
+  // Resolve the phase to render. Defaults to the first phase; falls back
+  // to the first if the stored active id is no longer in the list.
+  const activePhase = useMemo(() => {
+    if (!build || build.phases.length === 0) return undefined
+    const resolved =
+      build.phases.find((p) => p.phaseId === activePhaseId) ?? build.phases[0]
+    return resolved
+  }, [build, activePhaseId])
 
   if (loading) {
     return (
@@ -57,17 +59,6 @@ export function BuildDetail() {
     )
   }
 
-  const bundled = build as unknown as Record<string, unknown>
-  const phases =
-    (bundled.phases as Array<{ id?: string; phaseId?: number | string; steps?: Array<{ id?: string; stepId?: string }> }>) ??
-    []
-
-  const phaseIdOf = (p: { id?: string; phaseId?: number | string }): string =>
-    (p.id as string) ?? String(p.phaseId ?? '')
-
-  const currentPhaseId = activePhaseId ?? phaseIdOf(phases[0] ?? {})
-  const activePhase = phases.find((p) => phaseIdOf(p) === currentPhaseId)
-
   async function handleStepToggle(stepId: string) {
     await toggleStepComplete(stepId)
   }
@@ -79,16 +70,15 @@ export function BuildDetail() {
         <div className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-xl font-bold text-[var(--text-primary)]">
-              {readTitle(build)}
+              {build.name}
             </h2>
             <div className="flex gap-1.5 shrink-0">
-              {bundled.category ? <Badge variant="default">{String(bundled.category)}</Badge> : null}
+              {build.purpose ? <Badge variant="default">{build.purpose}</Badge> : null}
               {build.difficulty ? <Badge variant="accent">{build.difficulty}</Badge> : null}
-              {bundled.isAiGenerated ? <Badge variant="muted">AI</Badge> : null}
             </div>
           </div>
           <p className="text-sm text-[var(--text-secondary)]">{build.description}</p>
-          <BuildProgressBar build={build} />
+          <BuildProgressBar build={build} completedStepIds={completedSteps} />
         </div>
 
         {/* Two-column layout */}
@@ -96,25 +86,20 @@ export function BuildDetail() {
           {/* Steps — 3 cols */}
           <div className="lg:col-span-3 flex flex-col gap-0 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] overflow-hidden">
             <PhaseTabBar
-              phases={phases as never}
-              activePhaseId={currentPhaseId}
+              phases={build.phases}
+              activePhaseId={activePhase?.phaseId ?? build.phases[0].phaseId}
+              completedStepIds={completedSteps}
               onSelect={setActivePhaseId}
             />
             <div className="flex flex-col gap-2 p-4">
-              {activePhase?.steps?.map((step) => {
-                const stepId = (step.id as string) ?? (step.stepId as string)
-                return (
-                  <StepCard
-                    key={stepId}
-                    step={{
-                      ...(step as Record<string, unknown>),
-                      id: stepId,
-                      isCompleted: completedSteps.has(stepId),
-                    } as never}
-                    onToggle={(sid: string) => void handleStepToggle(sid)}
-                  />
-                )
-              })}
+              {activePhase?.steps.map((step) => (
+                <StepCard
+                  key={step.stepId}
+                  step={step}
+                  isCompleted={completedSteps.has(step.stepId)}
+                  onToggle={(sid) => void handleStepToggle(sid)}
+                />
+              ))}
             </div>
           </div>
 
@@ -123,13 +108,6 @@ export function BuildDetail() {
             <MaterialChecklist build={build} />
           </SectionCard>
         </div>
-
-        {/* Full instructions */}
-        {typeof bundled.markdownInstructions === 'string' && (
-          <SectionCard title="Full Instructions">
-            <BuildPreview markdown={bundled.markdownInstructions as string} />
-          </SectionCard>
-        )}
       </div>
     </PageLayout>
   )

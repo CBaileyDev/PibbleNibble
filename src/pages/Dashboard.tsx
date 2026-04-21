@@ -41,21 +41,6 @@ import type { ActivityItem } from '@/components/dashboard/ActivityFeed'
 import type { MinecraftBuild } from '@/types/build'
 import type { BuildProject } from '@/types/project'
 
-/** Read either the strict-schema `name` or the ambient `title` field. */
-function readTitle(build: MinecraftBuild): string {
-  const rec = build as unknown as Record<string, unknown>
-  return (rec.name as string) ?? (rec.title as string) ?? 'Untitled Build'
-}
-
-/** Read either `updatedAt` (ambient) or `updated_at` (raw row) or fall back. */
-function readUpdatedAt(build: MinecraftBuild): string {
-  const rec = build as unknown as Record<string, unknown>
-  return (
-    (rec.updatedAt as string) ??
-    (rec.updated_at as string) ??
-    new Date().toISOString()
-  )
-}
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -68,7 +53,7 @@ export function Dashboard() {
   const recentBuilds = useMemo(() => {
     return [...builds]
       .sort(
-        (a, b) => new Date(readUpdatedAt(b)).getTime() - new Date(readUpdatedAt(a)).getTime(),
+        (a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime(),
       )
       .slice(0, 3)
   }, [builds])
@@ -79,28 +64,30 @@ export function Dashboard() {
    * recent build as a proxy so the hero card has something to render.
    */
   const activeBuild: MinecraftBuild | undefined = recentBuilds[0]
-  const activeProject: BuildProject | null = activeBuild
-    ? {
-        id: `draft-${activeBuild.id}`,
-        userId: (activeBuild as unknown as { userId?: string }).userId ?? '',
-        buildId: activeBuild.id,
-        name: readTitle(activeBuild),
-        status: 'in-progress',
-        completedSteps: [],
-        collectedBlocks: [],
-        progress: { current: 0, total: 1 },
-        createdAt: readUpdatedAt(activeBuild),
-        updatedAt: readUpdatedAt(activeBuild),
-      }
-    : null
+  const activeProject: BuildProject | null = useMemo(() => {
+    if (!activeBuild) return null
+    const stamp = activeBuild.generatedAt
+    return {
+      id: `draft-${activeBuild.id}`,
+      userId: '',
+      buildId: activeBuild.id,
+      name: activeBuild.name,
+      status: 'in-progress',
+      completedSteps: [],
+      collectedBlocks: [],
+      progress: { current: 0, total: 1 },
+      createdAt: stamp,
+      updatedAt: stamp,
+    }
+  }, [activeBuild])
 
   const activities: ActivityItem[] = useMemo(() => {
     return builds
       .slice(0, 8)
       .map((b) => ({
         id: `act-${b.id}`,
-        message: `Saved ${readTitle(b)} to library`,
-        timestamp: readUpdatedAt(b),
+        message: `Saved ${b.name} to library`,
+        timestamp: b.generatedAt,
         type: 'save' as const,
       }))
   }, [builds])

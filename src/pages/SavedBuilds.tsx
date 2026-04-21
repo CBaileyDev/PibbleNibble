@@ -30,28 +30,9 @@ const DIFFICULTY_ORDER: Record<string, number> = {
   expert:   4,
 }
 
-/** Tolerant helpers — the DB row might carry either the strict schema's
- *  `name` or the ambient `title`. Same for timestamp casing. */
-function readTitle(b: MinecraftBuild): string {
-  const r = b as unknown as Record<string, unknown>
-  return (r.name as string) ?? (r.title as string) ?? 'Untitled Build'
-}
-function readUpdatedAt(b: MinecraftBuild): string {
-  const r = b as unknown as Record<string, unknown>
-  return (r.updatedAt as string) ?? (r.updated_at as string) ?? ''
-}
-function readDescription(b: MinecraftBuild): string {
-  const r = b as unknown as Record<string, unknown>
-  return (r.description as string) ?? ''
-}
-
 /** Total number of steps across all phases of a build — used for progress math. */
 function totalStepCount(b: MinecraftBuild): number {
-  const r = b as unknown as { phases?: Array<{ steps?: unknown[] }> }
-  const phases = r.phases ?? []
-  let total = 0
-  for (const p of phases) total += p.steps?.length ?? 0
-  return total
+  return b.phases.reduce((n, p) => n + p.steps.length, 0)
 }
 
 /**
@@ -117,8 +98,8 @@ export function SavedBuilds() {
     const searched = q
       ? filteredByTab.filter(
           (b) =>
-            readTitle(b).toLowerCase().includes(q) ||
-            readDescription(b).toLowerCase().includes(q),
+            b.name.toLowerCase().includes(q) ||
+            b.description.toLowerCase().includes(q),
         )
       : filteredByTab
 
@@ -126,11 +107,11 @@ export function SavedBuilds() {
     sorted.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(readUpdatedAt(b)).getTime() - new Date(readUpdatedAt(a)).getTime()
+          return new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()
         case 'oldest':
-          return new Date(readUpdatedAt(a)).getTime() - new Date(readUpdatedAt(b)).getTime()
+          return new Date(a.generatedAt).getTime() - new Date(b.generatedAt).getTime()
         case 'name-asc':
-          return readTitle(a).localeCompare(readTitle(b))
+          return a.name.localeCompare(b.name)
         case 'difficulty':
           return (
             (DIFFICULTY_ORDER[a.difficulty] ?? 0) -
