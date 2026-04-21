@@ -1,9 +1,9 @@
 /**
  * pages/SavedBuilds.tsx
  *
- * Library of every build the user has saved or started.
- * Filters, search, sort, and per-tab empty states all live here.
- * Data is static mock for Phase 1–6; Phase 7 swaps in Supabase queries.
+ * Library of every build the user has saved or started. Data comes
+ * from the Supabase-backed `useBuilds()` hook (with realtime updates)
+ * and is filtered, searched, and sorted client-side.
  */
 
 import { useMemo, useState, type CSSProperties } from 'react'
@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { BuildCard, type BuildProject } from '@/components/build/BuildCard'
+import { useBuilds } from '@/hooks/useBuilds'
 import type { MinecraftBuild } from '@/types/build'
 
 /* ───────────────────────── filter / sort types ───────────────────────── */
@@ -26,185 +27,75 @@ const DIFFICULTY_ORDER: Record<string, number> = {
   expert:   4,
 }
 
-/* ───────────────────────── mock data ─────────────────────────
-   Eight builds mixing all three lifecycle states. Replace with
-   real queries in Phase 7. Shape matches the Dashboard's ambient
-   MinecraftBuild usage. */
-
-interface MockBuild {
-  id: string
-  title: string
-  name?: string
-  description: string
-  difficulty: 'beginner' | 'easy' | 'medium' | 'hard' | 'expert'
-  progressionLevel: 'early' | 'mid' | 'late' | 'endgame'
-  blockPalette: string[]
-  createdAt: string
-  updatedAt: string
+/** Tolerant helpers — the DB row might carry either the strict schema's
+ *  `name` or the ambient `title`. Same for timestamp casing. */
+function readTitle(b: MinecraftBuild): string {
+  const r = b as unknown as Record<string, unknown>
+  return (r.name as string) ?? (r.title as string) ?? 'Untitled Build'
+}
+function readUpdatedAt(b: MinecraftBuild): string {
+  const r = b as unknown as Record<string, unknown>
+  return (r.updatedAt as string) ?? (r.updated_at as string) ?? ''
+}
+function readDescription(b: MinecraftBuild): string {
+  const r = b as unknown as Record<string, unknown>
+  return (r.description as string) ?? ''
 }
 
-const MOCK_BUILDS: MockBuild[] = [
-  {
-    id: 'build-mossy-cottage',
-    title: 'Mossy Oak Cottage',
-    description: 'A cozy woodland retreat with stone hearth and herb garden.',
-    difficulty: 'medium',
-    progressionLevel: 'early',
-    blockPalette: ['#5E4028', '#7A5638', '#8AA64A', '#C9B180', '#4B5D2E'],
-    createdAt: '2026-04-10T10:00:00Z',
-    updatedAt: '2026-04-20T18:30:00Z',
-  },
-  {
-    id: 'build-lantern-tower',
-    title: 'Blackstone Lantern Tower',
-    description: 'A tall nether-themed tower lit by soul lanterns.',
-    difficulty: 'hard',
-    progressionLevel: 'late',
-    blockPalette: ['#1E1A1E', '#3C2F30', '#E8A23A', '#8B6B3F', '#0F0D10'],
-    createdAt: '2026-04-18T14:00:00Z',
-    updatedAt: '2026-04-18T14:00:00Z',
-  },
-  {
-    id: 'build-koi-pavilion',
-    title: 'Willow Koi Pavilion',
-    description: 'A tranquil garden pavilion with a koi pond and cherry trees.',
-    difficulty: 'easy',
-    progressionLevel: 'mid',
-    blockPalette: ['#C47B5C', '#E8C9A3', '#6FA5A0', '#3E5A48', '#D8526E'],
-    createdAt: '2026-04-19T11:00:00Z',
-    updatedAt: '2026-04-19T11:00:00Z',
-  },
-  {
-    id: 'build-deepslate-vault',
-    title: 'Deepslate Vault Chamber',
-    description: 'A massive underground storage complex with cyan lighting.',
-    difficulty: 'expert',
-    progressionLevel: 'endgame',
-    blockPalette: ['#1B2330', '#2E3A4E', '#00B0D9', '#5A6A80', '#0A0D12'],
-    createdAt: '2026-04-20T08:00:00Z',
-    updatedAt: '2026-04-20T08:00:00Z',
-  },
-  {
-    id: 'build-cherry-bridge',
-    title: 'Cherrywood Rope Bridge',
-    description: 'A suspended walkway of cherry planks and dark oak posts.',
-    difficulty: 'medium',
-    progressionLevel: 'mid',
-    blockPalette: ['#E492B0', '#B85A79', '#3A2A1A', '#D8C19A', '#6B4935'],
-    createdAt: '2026-04-05T09:00:00Z',
-    updatedAt: '2026-04-14T12:00:00Z',
-  },
-  {
-    id: 'build-obsidian-spire',
-    title: 'Obsidian Spire',
-    description: 'A towering mage’s spire wreathed in soul-fire.',
-    difficulty: 'expert',
-    progressionLevel: 'endgame',
-    blockPalette: ['#0D0818', '#2A1240', '#8848C4', '#F0E0FF', '#1A0C2E'],
-    createdAt: '2026-03-28T14:00:00Z',
-    updatedAt: '2026-04-02T16:45:00Z',
-  },
-  {
-    id: 'build-willow-farm',
-    title: 'Willow Wheat Farm',
-    description: 'An automated wheat farm ringed by willow trees and a pond.',
-    difficulty: 'beginner',
-    progressionLevel: 'early',
-    blockPalette: ['#8AA64A', '#E8D07C', '#6B8C3F', '#3E5A48', '#C9B180'],
-    createdAt: '2026-04-01T10:30:00Z',
-    updatedAt: '2026-04-11T19:00:00Z',
-  },
-  {
-    id: 'build-copper-workshop',
-    title: 'Copper Clockwork Workshop',
-    description: 'A two-story tinkerer’s workshop of weathered copper and spruce.',
-    difficulty: 'hard',
-    progressionLevel: 'late',
-    blockPalette: ['#B8623A', '#6E8E7A', '#3A2A1A', '#D8C19A', '#1F2A24'],
-    createdAt: '2026-04-15T13:00:00Z',
-    updatedAt: '2026-04-21T08:20:00Z',
-  },
-]
-
-/** Pairs of (buildId → project). Only builds with entries here are
- *  in-progress or completed; the rest are "saved-only". */
-const MOCK_PROJECTS: Record<string, BuildProject> = {
-  'build-mossy-cottage': {
-    id: 'proj-1',
-    buildId: 'build-mossy-cottage',
-    status: 'in-progress',
-    progress: { current: 9, total: 24 },
-    currentStepText: 'Place oak log frame for the second-floor walls',
-    updatedAt: '2026-04-20T18:30:00Z',
-  },
-  'build-deepslate-vault': {
-    id: 'proj-2',
-    buildId: 'build-deepslate-vault',
-    status: 'in-progress',
-    progress: { current: 3, total: 40 },
-    currentStepText: 'Excavate the central chamber',
-    updatedAt: '2026-04-20T08:30:00Z',
-  },
-  'build-cherry-bridge': {
-    id: 'proj-3',
-    buildId: 'build-cherry-bridge',
-    status: 'completed',
-    progress: { current: 18, total: 18 },
-    updatedAt: '2026-04-14T12:00:00Z',
-  },
-  'build-willow-farm': {
-    id: 'proj-4',
-    buildId: 'build-willow-farm',
-    status: 'completed',
-    progress: { current: 12, total: 12 },
-    updatedAt: '2026-04-11T19:00:00Z',
-  },
+/** Read the linked project, if the DB has bundled it onto the row. */
+function readProject(b: MinecraftBuild): BuildProject | undefined {
+  const r = b as unknown as Record<string, unknown>
+  const p = (r.project as BuildProject | undefined) ?? undefined
+  if (p && typeof p.status === 'string') return p
+  // Some rows carry a flat `status` field — promote it to a synthetic project.
+  if (typeof r.status === 'string' && r.status !== 'saved') {
+    return {
+      id: `synthetic-${b.id}`,
+      buildId: b.id,
+      status: r.status as BuildProject['status'],
+      progress: (r.progress as { current: number; total: number } | undefined) ??
+        { current: 0, total: 1 },
+      currentStepText: (r.currentStepText as string | undefined),
+      updatedAt: readUpdatedAt(b),
+    }
+  }
+  return undefined
 }
 
 /* ───────────────────────── page component ───────────────────────── */
 
 export function SavedBuilds() {
   const navigate = useNavigate()
+  const { builds, loading, deleteBuild } = useBuilds()
 
   const [tab, setTab]       = useState<FilterTab>('all')
   const [sortBy, setSortBy] = useState<SortKey>('newest')
   const [query, setQuery]   = useState('')
-
-  // Local state so "delete" and "save" do something visible with mock data.
-  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set())
   const [savedFlags, setSavedFlags] = useState<Record<string, boolean>>({})
 
-  const visibleBuilds = useMemo(
-    () => MOCK_BUILDS.filter((b) => !deletedIds.has(b.id)),
-    [deletedIds],
-  )
-
-  /* Counts per tab — always computed from the un-filtered set so pill
-     badges don't shift as the user types into the search box. */
   const counts = useMemo(() => {
     let saved = 0
     let inProgress = 0
     let completed = 0
-    for (const b of visibleBuilds) {
-      const p = MOCK_PROJECTS[b.id]
+    for (const b of builds) {
+      const p = readProject(b)
       if (!p) saved++
       else if (p.status === 'in-progress') inProgress++
       else if (p.status === 'done' || p.status === 'completed') completed++
     }
     return {
-      all:           visibleBuilds.length,
+      all:           builds.length,
       saved,
       'in-progress': inProgress,
       completed,
     } satisfies Record<FilterTab, number>
-  }, [visibleBuilds])
+  }, [builds])
 
-  /* Apply tab filter → search → sort. */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
 
-    const filteredByTab = visibleBuilds.filter((b) => {
-      const p = MOCK_PROJECTS[b.id]
+    const filteredByTab = builds.filter((b) => {
+      const p = readProject(b)
       if (tab === 'all')         return true
       if (tab === 'saved')       return !p
       if (tab === 'in-progress') return p?.status === 'in-progress'
@@ -215,8 +106,8 @@ export function SavedBuilds() {
     const searched = q
       ? filteredByTab.filter(
           (b) =>
-            b.title.toLowerCase().includes(q) ||
-            b.description.toLowerCase().includes(q),
+            readTitle(b).toLowerCase().includes(q) ||
+            readDescription(b).toLowerCase().includes(q),
         )
       : filteredByTab
 
@@ -224,11 +115,11 @@ export function SavedBuilds() {
     sorted.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          return new Date(readUpdatedAt(b)).getTime() - new Date(readUpdatedAt(a)).getTime()
         case 'oldest':
-          return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+          return new Date(readUpdatedAt(a)).getTime() - new Date(readUpdatedAt(b)).getTime()
         case 'name-asc':
-          return a.title.localeCompare(b.title)
+          return readTitle(a).localeCompare(readTitle(b))
         case 'difficulty':
           return (
             (DIFFICULTY_ORDER[a.difficulty] ?? 0) -
@@ -240,7 +131,7 @@ export function SavedBuilds() {
     })
 
     return sorted
-  }, [visibleBuilds, tab, query, sortBy])
+  }, [builds, tab, query, sortBy])
 
   /* ───────── handlers ───────── */
 
@@ -253,12 +144,12 @@ export function SavedBuilds() {
   function handleContinue(buildId: string) {
     navigate(`/builds/${buildId}`)
   }
-  function handleDelete(buildId: string) {
-    setDeletedIds((prev) => {
-      const next = new Set(prev)
-      next.add(buildId)
-      return next
-    })
+  async function handleDelete(buildId: string) {
+    try {
+      await deleteBuild(buildId)
+    } catch {
+      /* error surfaced via hook state */
+    }
   }
   function handleSave(buildId: string) {
     setSavedFlags((prev) => ({ ...prev, [buildId]: !prev[buildId] }))
@@ -282,7 +173,6 @@ export function SavedBuilds() {
       }
     >
       <div style={pageStyle}>
-        {/* Filter pill tabs */}
         <nav className="tabs" aria-label="Build status filter" style={tabsStyle}>
           <TabPill
             label="All"
@@ -310,7 +200,6 @@ export function SavedBuilds() {
           />
         </nav>
 
-        {/* Search + sort controls */}
         <div style={controlsRowStyle}>
           <label style={searchWrapStyle}>
             <span style={searchIconStyle} aria-hidden>
@@ -344,8 +233,12 @@ export function SavedBuilds() {
           </label>
         </div>
 
-        {/* Grid or per-tab empty state */}
-        {filtered.length === 0 ? (
+        {loading && builds.length === 0 ? (
+          <div style={emptyStyle}>
+            <span style={emptyGlyphStyle} aria-hidden>⏳</span>
+            <h2 style={emptyTitleStyle}>Loading your builds…</h2>
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             tab={tab}
             hasQuery={query.trim().length > 0}
@@ -356,15 +249,15 @@ export function SavedBuilds() {
         ) : (
           <div style={gridStyle}>
             {filtered.map((build) => {
-              const project = MOCK_PROJECTS[build.id]
+              const project = readProject(build)
               return (
                 <BuildCard
                   key={build.id + (savedFlags[build.id] ? '-saved' : '')}
-                  build={build as unknown as MinecraftBuild}
+                  build={build}
                   project={project}
                   onContinue={() => handleContinue(build.id)}
                   onView={() => handleView(build.id)}
-                  onDelete={() => handleDelete(build.id)}
+                  onDelete={() => void handleDelete(build.id)}
                   onSave={project ? undefined : () => handleSave(build.id)}
                 />
               )

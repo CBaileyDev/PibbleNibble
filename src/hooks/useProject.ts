@@ -1,98 +1,208 @@
 /**
  * hooks/useProject.ts
  *
- * TanStack Query hooks for the `project_tasks` table (kanban board).
- * Drag-and-drop reordering is handled client-side by @dnd-kit and
- * persisted via the `useUpdateTaskStatus` mutation.
+ * Tracks the player's per-build project row. One project per
+ * (user, build) pair; created lazily on first interaction.
+ *
+ * The project row stores:
+ *   • status            — 'todo' | 'in-progress' | 'done' | 'completed'
+ *   • current_step_id   — id of the step the player is on
+ *   • completed_steps   — string[] of step ids already finished
+ *
+ * `completedSteps` is exposed as a `Set<string>` for cheap membership checks.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { ProjectTask, KanbanBoard, KanbanStatus } from '@/types/project'
+import { useUserStore } from '@/stores/userStore'
+import type { BuildProject, ProjectStatus } from '@/types/project'
 
-const QUERY_KEY = 'project_tasks'
+type Err = Error | null
 
-/** Returns all tasks for the user, grouped into a KanbanBoard. */
-export function useKanbanBoard() {
-  return useQuery({
-    queryKey: [QUERY_KEY],
-    queryFn: async (): Promise<KanbanBoard> => {
-      const { data, error } = await supabase
-        .from('project_tasks')
-        .select('*')
-        .order('order', { ascending: true })
+/** DB row → BuildProject. */
+function rowToProject(row: Record<string, unknown>): BuildProject {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    buildId: row.build_id as string,
+    name: (row.name as string | null) ?? undefined,
+    status: row.status as ProjectStatus,
+    currentStepId: (row.current_step_id as string | null) ?? undefined,
+    completedSteps: (row.completed_steps as string[] | null) ?? [],
+    collectedBlocks: (row.collected_blocks as string[] | null) ?? [],
+    currentStepText: (row.current_step_text as string | null) ?? undefined,
+    startedAt: (row.started_at as string | null) ?? undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }
+}
 
-      if (error) throw error
+export function useProject(buildId: string) {
+  const userId = useUserStore((s) => s.user?.id)
 
-      const tasks = data as ProjectTask[]
-      return {
-        todo: tasks.filter((t) => t.status === 'todo'),
-        in_progress: tasks.filter((t) => t.status === 'in_progress'),
-        done: tasks.filter((t) => t.status === 'done'),
+  const [project, setProject] = useState<BuildProject | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Err>(null)
+
+  const projectRef = useRef<BuildProject | null>(null)
+  projectRef.current = project
+
+  /** Fetch-or-create the project row for this (user, build). */
+  const fetchProject = useCallback(async () => {
+    if (!buildId || !userId) {
+      setProject(null)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+
+    const { data, error: err } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('build_id', buildId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (err) {
+      setError(err)
+      setLoading(false)
+      return
+    }
+
+    if (data) {
+      setProject(rowToProject(data as Record<string, unknown>))
+      setLoading(false)
+      return
+    }
+
+    // No existing row — lazily create one in 'todo' state.
+    const now = new Date().toISOString()
+    const { data: created, error: createErr } = await supabase
+      .from('projects')
+      .insert({
+        user_id: userId,
+        build_id: buildId,
+        status: 'todo',
+        completed_steps: [],
+        collected_blocks: [],
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single()
+
+    if (createErr) {
+      setError(createErr)
+      setLoading(false)
+      return
+    }
+    setProject(rowToProject(created as Record<string, unknown>))
+    setLoading(false)
+  }, [buildId, userId])
+
+  /** Patch the project row and locally mirror the change. */
+  const patchProject = useCallback(
+    async (patch: Record<string, unknown>, local: Partial<BuildProject>) => {
+      const current = projectRef.current
+      if (!current) return
+      const now = new Date().toISOString()
+      const { error: err } = await supabase
+        .from('projects')
+        .update({ ...patch, updated_at: now })
+        .eq('id', current.id)
+      if (err) {
+        setError(err)
+        throw err
       }
+      setProject((prev) =>
+        prev ? { ...prev, ...local, updatedAt: now } : prev,
+      )
     },
-  })
-}
+    [],
+  )
 
-/** Move a task to a new column and update its order. */
-export function useUpdateTaskStatus() {
-  const qc = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({
-      id,
-      status,
-      order,
-    }: {
-      id: string
-      status: KanbanStatus
-      order: number
-    }) => {
-      const { error } = await supabase
-        .from('project_tasks')
-        .update({ status, order, updated_at: new Date().toISOString() })
-        .eq('id', id)
-
-      if (error) throw error
+  const updateStatus = useCallback(
+    async (status: ProjectStatus): Promise<void> => {
+      await patchProject({ status }, { status })
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] })
-    },
-  })
-}
+    [patchProject],
+  )
 
-/** Create a new task card. */
-export function useCreateTask() {
-  const qc = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (task: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt'>) => {
-      const { data, error } = await supabase
-        .from('project_tasks')
-        .insert(task)
-        .select()
-        .single()
-
-      if (error) throw error
-      return data as ProjectTask
+  const updateCurrentStep = useCallback(
+    async (stepId: string): Promise<void> => {
+      await patchProject(
+        { current_step_id: stepId },
+        { currentStepId: stepId },
+      )
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] })
-    },
-  })
-}
+    [patchProject],
+  )
 
-/** Delete a task by ID. */
-export function useDeleteTask() {
-  const qc = useQueryClient()
+  const toggleStepComplete = useCallback(
+    async (stepId: string): Promise<void> => {
+      const current = projectRef.current
+      if (!current) return
+      const has = current.completedSteps.includes(stepId)
+      const nextSteps = has
+        ? current.completedSteps.filter((s) => s !== stepId)
+        : [...current.completedSteps, stepId]
 
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('project_tasks').delete().eq('id', id)
-      if (error) throw error
+      // Auto-bump status based on completion progress.
+      let status: ProjectStatus | undefined
+      if (nextSteps.length > 0 && current.status === 'todo') {
+        status = 'in-progress'
+      }
+
+      await patchProject(
+        status
+          ? { completed_steps: nextSteps, status }
+          : { completed_steps: nextSteps },
+        status
+          ? { completedSteps: nextSteps, status }
+          : { completedSteps: nextSteps },
+      )
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] })
-    },
-  })
+    [patchProject],
+  )
+
+  useEffect(() => {
+    void fetchProject()
+
+    if (!buildId || !userId) return
+    const channel = supabase
+      .channel(`project_${buildId}_${userId}_realtime`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects',
+          filter: `build_id=eq.${buildId}`,
+        },
+        () => {
+          void fetchProject()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [buildId, userId, fetchProject])
+
+  const completedSteps = useMemo(
+    () => new Set(project?.completedSteps ?? []),
+    [project?.completedSteps],
+  )
+
+  return {
+    project,
+    loading,
+    error,
+    completedSteps,
+    updateStatus,
+    updateCurrentStep,
+    toggleStepComplete,
+  }
 }

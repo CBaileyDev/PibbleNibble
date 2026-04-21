@@ -2,10 +2,11 @@
  * pages/Settings.tsx
  *
  * Player settings — appearance, profile, world notes, preferences,
- * and destructive account actions. All data is mocked locally for now.
+ * and destructive account actions. Backed by the Supabase hooks:
+ * useUserProfile and useWorldNotes.
  */
 
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Trash2, ChevronDown, AlertTriangle, Download } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
@@ -15,8 +16,14 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
+import { toast } from '@/components/ui/Toast'
+import { useUserProfile } from '@/hooks/useUserProfile'
+import { useWorldNotes } from '@/hooks/useWorldNotes'
+import { useUserStore } from '@/stores/userStore'
+import type { UserPreferences } from '@/types/user'
+import type { WorldNote } from '@/types/project'
 
-/* ─── Types & mock data ──────────────────────────────────────────────── */
+/* ─── Types & mock-free constants ────────────────────────────────────── */
 
 interface AvatarOption {
   id: string
@@ -34,21 +41,6 @@ const AVATAR_OPTIONS: AvatarOption[] = [
   { id: 'axolotl',  letter: 'A', name: 'Axolotl',  color: '#F2A3C7' },
   { id: 'villager', letter: 'V', name: 'Villager', color: '#A27B5C' },
   { id: 'steve',    letter: 'S', name: 'Steve',    color: '#4E7AC7' },
-]
-
-interface WorldNoteItem {
-  id: string
-  name: string
-  x: number
-  y: number
-  z: number
-  notes?: string
-}
-
-const INITIAL_NOTES: WorldNoteItem[] = [
-  { id: 'n1', name: 'Spawn Base',     x: 100,  y: 64, z: -55, notes: 'Main chest room.' },
-  { id: 'n2', name: 'Diamond Mine',   x: -842, y: 12, z: 301 },
-  { id: 'n3', name: 'Nether Portal',  x: 48,   y: 70, z: 102, notes: 'Linked to wool farm.' },
 ]
 
 const DIFFICULTY_OPTIONS = [
@@ -111,20 +103,32 @@ function ConfirmModal({
 /* ─── Page ───────────────────────────────────────────────────────────── */
 
 export function Settings() {
-  // Profile
-  const [displayName, setDisplayName] = useState('Pibble')
+  const user = useUserStore((s) => s.user)
+  const { profile, updateDisplayName, updatePreferences } = useUserProfile()
+  const { notes, addNote, deleteNote } = useWorldNotes()
+
+  // Profile (local draft, synced from profile)
+  const [displayName, setDisplayName] = useState('')
   const [selectedAvatar, setSelectedAvatar] = useState<string>('creeper')
 
-  // World notes
-  const [notes, setNotes] = useState<WorldNoteItem[]>(INITIAL_NOTES)
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.displayName)
+      if (profile.avatarUrl) setSelectedAvatar(profile.avatarUrl)
+    }
+  }, [profile])
+
+  // World notes form
   const [form, setForm] = useState({ name: '', x: '', y: '', z: '', notes: '' })
 
-  // Preferences
-  const [showQuantities, setShowQuantities] = useState(true)
-  const [autoAdvance, setAutoAdvance] = useState(false)
-  const [showTips, setShowTips] = useState(true)
-  const [defaultDifficulty, setDefaultDifficulty] = useState('medium')
-  const [defaultBuildSize, setDefaultBuildSize] = useState('medium')
+  // Preferences — mirror profile.preferences; fall back to sensible defaults.
+  const prefs: UserPreferences = profile?.preferences ?? {
+    showQuantities: true,
+    autoAdvance: false,
+    showTips: true,
+    defaultDifficulty: 'medium',
+    defaultBuildSize: 'medium',
+  }
 
   // Danger zone
   const [dangerOpen, setDangerOpen] = useState(false)
@@ -132,35 +136,49 @@ export function Settings() {
 
   /* ── Handlers ─── */
 
-  function handleSaveProfile() {
-    // Mock: no persistence.
-    // eslint-disable-next-line no-console
-    console.log('saved profile', { displayName, selectedAvatar })
-  }
-
-  function handleAddNote() {
-    if (!form.name.trim()) return
-    const next: WorldNoteItem = {
-      id: crypto.randomUUID(),
-      name: form.name.trim(),
-      x: Number(form.x) || 0,
-      y: Number(form.y) || 0,
-      z: Number(form.z) || 0,
-      notes: form.notes.trim() || undefined,
+  async function handleSaveProfile() {
+    try {
+      await updateDisplayName(displayName.trim() || 'Player')
+      toast.success('Profile saved')
+    } catch {
+      toast.error('Failed to save profile')
     }
-    setNotes((list) => [next, ...list])
-    setForm({ name: '', x: '', y: '', z: '', notes: '' })
   }
 
-  function handleDeleteNote(id: string) {
-    setNotes((list) => list.filter((n) => n.id !== id))
+  async function handleAddNote() {
+    if (!form.name.trim() || !user) return
+    try {
+      await addNote({
+        userId: user.id,
+        label: form.name.trim(),
+        description: form.notes.trim() || undefined,
+        x: Number(form.x) || 0,
+        y: Number(form.y) || 0,
+        z: Number(form.z) || 0,
+        dimension: 'overworld',
+        pinColor: '#6d83f2',
+      })
+      setForm({ name: '', x: '', y: '', z: '', notes: '' })
+    } catch {
+      toast.error('Failed to add note')
+    }
   }
 
-  function handleClearProgress() {
-    // Mock clearing in-memory state.
-    setNotes([])
-    // eslint-disable-next-line no-console
-    console.log('progress cleared')
+  async function handleDeleteNote(id: string) {
+    try {
+      await deleteNote(id)
+    } catch {
+      toast.error('Failed to delete note')
+    }
+  }
+
+  async function handleClearProgress() {
+    try {
+      await Promise.all(notes.map((n: WorldNote) => deleteNote(n.id)))
+      toast.success('Progress cleared')
+    } catch {
+      toast.error('Failed to clear progress')
+    }
   }
 
   function handleExportBuilds() {
@@ -168,13 +186,7 @@ export function Settings() {
       exportedAt: new Date().toISOString(),
       profile: { displayName, avatar: selectedAvatar },
       worldNotes: notes,
-      preferences: {
-        showQuantities,
-        autoAdvance,
-        showTips,
-        defaultDifficulty,
-        defaultBuildSize,
-      },
+      preferences: prefs,
       builds: [],
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -188,6 +200,14 @@ export function Settings() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  }
+
+  async function handlePrefChange(patch: Partial<UserPreferences>) {
+    try {
+      await updatePreferences(patch)
+    } catch {
+      toast.error('Failed to update preferences')
+    }
   }
 
   /* ── Style tokens ─── */
@@ -205,7 +225,7 @@ export function Settings() {
   return (
     <PageLayout title="Settings" subtitle="Tune your profile, preferences, and shared world notes.">
       <div className="max-w-3xl mx-auto flex flex-col gap-5 w-full">
-        {/* 1. APPEARANCE ──────────────────────────────────────────── */}
+        {/* 1. APPEARANCE */}
         <SectionCard title="Appearance">
           <div className="flex flex-col gap-4">
             <p className="text-sm text-[var(--text-secondary)]">
@@ -215,7 +235,7 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 2. PROFILE ─────────────────────────────────────────────── */}
+        {/* 2. PROFILE */}
         <SectionCard title="Profile">
           <div className="flex flex-col gap-5">
             <div className="flex items-end gap-2">
@@ -227,7 +247,7 @@ export function Settings() {
                   placeholder="Your display name"
                 />
               </div>
-              <Button onClick={handleSaveProfile}>Save</Button>
+              <Button onClick={() => void handleSaveProfile()}>Save</Button>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -274,7 +294,7 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 3. WORLD NOTES ─────────────────────────────────────────── */}
+        {/* 3. WORLD NOTES */}
         <SectionCard
           title="World Notes"
           subtitle="Coordinates and landmarks shared between both players."
@@ -293,21 +313,21 @@ export function Settings() {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-[var(--text-primary)] text-sm">
-                        {n.name}
+                        {n.label}
                       </p>
                       <p className="text-xs mt-0.5" style={monoStyle}>
                         X: {n.x}   Y: {n.y}   Z: {n.z}
                       </p>
-                      {n.notes && (
+                      {n.description && (
                         <p className="text-xs text-[var(--text-secondary)] mt-1">
-                          {n.notes}
+                          {n.description}
                         </p>
                       )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleDeleteNote(n.id)}
-                      aria-label={`Delete ${n.name}`}
+                      onClick={() => void handleDeleteNote(n.id)}
+                      aria-label={`Delete ${n.label}`}
                       className="p-2 rounded-[var(--r-sm)] text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--bg-hover)] transition-colors"
                     >
                       <Trash2 size={15} />
@@ -356,7 +376,7 @@ export function Settings() {
                 className="w-full rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] resize-y"
               />
               <div className="flex justify-end">
-                <Button onClick={handleAddNote} disabled={!form.name.trim()}>
+                <Button onClick={() => void handleAddNote()} disabled={!form.name.trim() || !user}>
                   Add Note
                 </Button>
               </div>
@@ -364,41 +384,49 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 4. PREFERENCES ─────────────────────────────────────────── */}
+        {/* 4. PREFERENCES */}
         <SectionCard title="Preferences">
           <div className="flex flex-col gap-4">
             <Toggle
-              checked={showQuantities}
-              onChange={setShowQuantities}
+              checked={prefs.showQuantities}
+              onChange={(v) => void handlePrefChange({ showQuantities: v })}
               label="Show material quantities in steps"
             />
             <Toggle
-              checked={autoAdvance}
-              onChange={setAutoAdvance}
+              checked={prefs.autoAdvance}
+              onChange={(v) => void handlePrefChange({ autoAdvance: v })}
               label="Auto-advance to next step on completion"
             />
             <Toggle
-              checked={showTips}
-              onChange={setShowTips}
+              checked={prefs.showTips}
+              onChange={(v) => void handlePrefChange({ showTips: v })}
               label="Show tips and warnings"
             />
             <div className="h-px bg-[var(--border)] my-1" />
             <Select
               label="Default difficulty"
               options={DIFFICULTY_OPTIONS}
-              value={defaultDifficulty}
-              onChange={(e) => setDefaultDifficulty(e.target.value)}
+              value={prefs.defaultDifficulty}
+              onChange={(e) =>
+                void handlePrefChange({
+                  defaultDifficulty: e.target.value as UserPreferences['defaultDifficulty'],
+                })
+              }
             />
             <Select
               label="Default build size"
               options={BUILD_SIZE_OPTIONS}
-              value={defaultBuildSize}
-              onChange={(e) => setDefaultBuildSize(e.target.value)}
+              value={prefs.defaultBuildSize}
+              onChange={(e) =>
+                void handlePrefChange({
+                  defaultBuildSize: e.target.value as UserPreferences['defaultBuildSize'],
+                })
+              }
             />
           </div>
         </SectionCard>
 
-        {/* 5. DANGER ZONE ─────────────────────────────────────────── */}
+        {/* 5. DANGER ZONE */}
         <section
           className="rounded-[var(--r-lg)] overflow-hidden"
           style={dangerCardStyle}
@@ -438,10 +466,10 @@ export function Settings() {
               <div className="flex items-center justify-between gap-3 pt-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
-                    Clear all progress data
+                    Clear all world notes
                   </p>
                   <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                    Removes your checklists, world notes, and preferences.
+                    Removes every coordinate pin you&rsquo;ve saved.
                   </p>
                 </div>
                 <Button
@@ -477,10 +505,10 @@ export function Settings() {
 
       <ConfirmModal
         isOpen={confirmClearOpen}
-        title="Clear all progress?"
-        message="This permanently removes your checklists, world notes, and preferences. This action cannot be undone."
+        title="Clear all world notes?"
+        message="This permanently removes every pin you&rsquo;ve saved. This action cannot be undone."
         confirmLabel="Yes, clear everything"
-        onConfirm={handleClearProgress}
+        onConfirm={() => void handleClearProgress()}
         onClose={() => setConfirmClearOpen(false)}
       />
     </PageLayout>

@@ -1,38 +1,73 @@
 /**
  * components/instructions/MaterialChecklist.tsx
  *
- * Interactive shopping list for a build. Each row shows the material
- * name, Minecraft ID, and a number input for how many the player has
- * gathered. Progress persists to Supabase via useUpdateGathered.
+ * Interactive shopping list for a build. Each row is a checkbox tied
+ * to a unique blockId — toggling it calls `toggleCollected` on the
+ * `useMaterialChecklist(projectId)` hook and persists to Supabase.
  */
 
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { Package } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
-import { useUpdateGathered, computeChecklistProgress } from '@/hooks/useMaterialChecklist'
+import { useMaterialChecklist } from '@/hooks/useMaterialChecklist'
+import { useProject } from '@/hooks/useProject'
 import type { MinecraftBuild, MaterialItem } from '@/types/build'
 
 interface MaterialChecklistProps {
   build: MinecraftBuild
 }
 
-export function MaterialChecklist({ build }: MaterialChecklistProps) {
-  const [localMaterials, setLocalMaterials] = useState<MaterialItem[]>(build.materials)
-  const { mutate: updateGathered, isPending } = useUpdateGathered()
-  const progress = computeChecklistProgress({ ...build, materials: localMaterials })
+/** Display-name accessor — the strict schema uses `blockName`, but some
+ *  legacy rows may carry `name` or `minecraftId`. */
+function displayName(m: MaterialItem): string {
+  const r = m as unknown as Record<string, unknown>
+  return (m.blockName as string) ?? (r.name as string) ?? (m.blockId as string)
+}
 
-  function handleGatheredChange(id: string, gathered: number) {
-    setLocalMaterials((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, gathered: Math.min(gathered, m.quantity) } : m))
-    )
+export function MaterialChecklist({ build }: MaterialChecklistProps) {
+  // The project hook resolves (or creates) the per-user project row for
+  // this build. We need its id to drive the checklist hook.
+  const { project } = useProject(build.id)
+  const projectId = project?.id ?? ''
+
+  const {
+    materials: persistedMaterials,
+    collectedBlocks,
+    toggleCollected,
+    resetAll,
+    collectedCount,
+    totalCount,
+    loading,
+  } = useMaterialChecklist(projectId)
+
+  // Prefer the build-embedded materials if the project/materials haven't
+  // resolved yet — keeps the list visible during first paint.
+  const materials: MaterialItem[] = persistedMaterials.length
+    ? persistedMaterials
+    : build.materials ?? []
+
+  const collectedSet = useMemo(() => new Set(collectedBlocks), [collectedBlocks])
+
+  const total = totalCount || materials.length
+  const progress = total === 0 ? 0 : Math.round((collectedCount / total) * 100)
+
+  async function handleToggle(blockId: string) {
+    if (!projectId) return
+    try {
+      await toggleCollected(blockId)
+    } catch {
+      toast.error('Failed to update checklist')
+    }
   }
 
-  function handleSave() {
-    updateGathered(
-      { buildId: build.id, materials: localMaterials },
-      { onSuccess: () => toast.success('Checklist saved!') }
-    )
+  async function handleReset() {
+    try {
+      await resetAll()
+      toast.success('Checklist reset')
+    } catch {
+      toast.error('Failed to reset checklist')
+    }
   }
 
   return (
@@ -45,59 +80,64 @@ export function MaterialChecklist({ build }: MaterialChecklistProps) {
             style={{ width: `${progress}%` }}
           />
         </div>
-        <span className="text-sm font-medium text-[var(--text-primary)] tabular-nums w-10 text-right">
-          {progress}%
+        <span className="text-sm font-medium text-[var(--text-primary)] tabular-nums w-20 text-right">
+          {collectedCount}/{total}
         </span>
       </div>
 
       {/* Material rows */}
       <div className="flex flex-col gap-2">
-        {localMaterials.map((material) => {
-          const isComplete = material.gathered >= material.quantity
+        {materials.map((material) => {
+          const isComplete = collectedSet.has(material.blockId)
           return (
-            <div
-              key={material.id}
+            <label
+              key={material.blockId}
               className={[
-                'flex items-center gap-3 p-3 rounded-[var(--radius-md)] border transition-colors',
+                'flex items-center gap-3 p-3 rounded-[var(--radius-md)] border transition-colors cursor-pointer',
                 isComplete
                   ? 'border-[var(--border-subtle)] bg-[var(--bg-tertiary)] opacity-70'
                   : 'border-[var(--border)] bg-[var(--surface)]',
               ].join(' ')}
             >
+              <input
+                type="checkbox"
+                checked={isComplete}
+                disabled={loading || !projectId}
+                onChange={() => void handleToggle(material.blockId)}
+                className="shrink-0"
+              />
               <Package size={14} className="shrink-0 text-[var(--text-muted)]" />
 
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${isComplete ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-                  {material.name}
+                <p
+                  className={`text-sm font-medium ${
+                    isComplete
+                      ? 'line-through text-[var(--text-muted)]'
+                      : 'text-[var(--text-primary)]'
+                  }`}
+                >
+                  {displayName(material)}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] font-mono">{material.minecraftId}</p>
+                <p className="text-xs text-[var(--text-muted)] font-mono">
+                  {material.blockId}
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <input
-                  type="number"
-                  min={0}
-                  max={material.quantity}
-                  value={material.gathered}
-                  onChange={(e) => handleGatheredChange(material.id, Number(e.target.value))}
-                  className="w-16 h-7 text-center text-sm rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                />
-                <span className="text-xs text-[var(--text-muted)] tabular-nums">
-                  / {material.quantity}
-                </span>
-              </div>
-            </div>
+              <span className="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
+                × {material.quantity}
+              </span>
+            </label>
           )
         })}
       </div>
 
       <Button
-        onClick={handleSave}
-        isLoading={isPending}
+        onClick={() => void handleReset()}
         variant="secondary"
         className="w-full mt-2"
+        disabled={collectedCount === 0}
       >
-        Save Checklist
+        Reset Checklist
       </Button>
     </div>
   )

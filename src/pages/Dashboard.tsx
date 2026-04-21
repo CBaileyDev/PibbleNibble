@@ -1,8 +1,9 @@
 /**
  * pages/Dashboard.tsx
  *
- * Main hub page for Pibble & Nibble. Composes all dashboard widgets using
- * static mock data until Supabase is wired in Phase 7.
+ * Main hub page for Pibble & Nibble. Data flows from the Supabase-backed
+ * hooks: useBuilds (saved builds + realtime), useWorldNotes (coordinate
+ * pins), and useUserProfile (theme / display name).
  *
  * Layout:
  *   PageLayout
@@ -13,6 +14,7 @@
  *       └── Right — WorldNotesWidget + ActivityFeed
  */
 
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Hammer,
@@ -24,6 +26,8 @@ import {
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { useTheme } from '@/hooks/useTheme'
+import { useBuilds } from '@/hooks/useBuilds'
+import { useWorldNotes } from '@/hooks/useWorldNotes'
 
 import { StatCard } from '@/components/dashboard/StatCard'
 import { ActiveProjectCard } from '@/components/dashboard/ActiveProjectCard'
@@ -33,237 +37,91 @@ import { WorldNotesWidget } from '@/components/dashboard/WorldNotesWidget'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import type { ActivityItem } from '@/components/dashboard/ActivityFeed'
 
-import type { MinecraftBuild, BuildProject } from '@/types/build'
-import type { WorldNote } from '@/types/project'
+import type { MinecraftBuild } from '@/types/build'
+import type { BuildProject } from '@/types/project'
 
-/* ── Mock data ───────────────────────────────────────────────────────────────
-   All data is static for Phase 1–6. Phase 7 replaces these constants with
-   Supabase queries / React Query hooks.
-   ─────────────────────────────────────────────────────────────────────────── */
-
-const MOCK_ACTIVE_BUILD: MinecraftBuild = {
-  id: 'build-mossy-cottage',
-  userId: 'user-1',
-  title: 'Mossy Oak Cottage',
-  description: 'A cozy woodland retreat with stone hearth and herb garden.',
-  category: 'house',
-  difficulty: 'medium',
-  edition: 'java',
-  dimensions: { width: 12, height: 8, depth: 10 },
-  estimatedMinutes: 90,
-  materials: [],
-  phases: [],
-  markdownInstructions: '',
-  isAiGenerated: true,
-  tags: ['cozy', 'forest'],
-  isFavorite: true,
-  blockPalette: ['#5E4028', '#7A5638', '#8AA64A', '#C9B180', '#4B5D2E'],
-  createdAt: '2026-04-10T10:00:00Z',
-  updatedAt: '2026-04-20T18:30:00Z',
+/** Read either the strict-schema `name` or the ambient `title` field. */
+function readTitle(build: MinecraftBuild): string {
+  const rec = build as unknown as Record<string, unknown>
+  return (rec.name as string) ?? (rec.title as string) ?? 'Untitled Build'
 }
 
-const MOCK_PROJECT: BuildProject = {
-  id: 'proj-1',
-  userId: 'user-1',
-  buildId: MOCK_ACTIVE_BUILD.id,
-  name: 'Mossy Oak Cottage',
-  status: 'in-progress',
-  progress: { current: 9, total: 24 },
-  currentStepText: 'Place the oak log frame for the second-floor walls',
-  startedAt: '2026-04-15T09:00:00Z',
-  createdAt: '2026-04-15T09:00:00Z',
-  updatedAt: '2026-04-20T18:30:00Z',
+/** Read either `updatedAt` (ambient) or `updated_at` (raw row) or fall back. */
+function readUpdatedAt(build: MinecraftBuild): string {
+  const rec = build as unknown as Record<string, unknown>
+  return (
+    (rec.updatedAt as string) ??
+    (rec.updated_at as string) ??
+    new Date().toISOString()
+  )
 }
-
-const MOCK_RECENT_BUILDS: MinecraftBuild[] = [
-  {
-    id: 'build-lantern-tower',
-    userId: 'user-1',
-    title: 'Blackstone Lantern Tower',
-    description: 'A tall nether-themed tower lit by soul lanterns.',
-    category: 'landmark',
-    difficulty: 'hard',
-    edition: 'java',
-    dimensions: { width: 9, height: 22, depth: 9 },
-    estimatedMinutes: 180,
-    materials: [],
-    phases: [],
-    markdownInstructions: '',
-    isAiGenerated: true,
-    tags: ['nether', 'tower'],
-    isFavorite: false,
-    blockPalette: ['#1E1A1E', '#3C2F30', '#E8A23A', '#8B6B3F', '#0F0D10'],
-    createdAt: '2026-04-18T14:00:00Z',
-    updatedAt: '2026-04-18T14:00:00Z',
-  },
-  {
-    id: 'build-koi-pavilion',
-    userId: 'user-1',
-    title: 'Willow Koi Pavilion',
-    description: 'A tranquil garden pavilion with a koi pond and cherry trees.',
-    category: 'decoration',
-    difficulty: 'easy',
-    edition: 'both',
-    dimensions: { width: 16, height: 6, depth: 14 },
-    estimatedMinutes: 45,
-    materials: [],
-    phases: [],
-    markdownInstructions: '',
-    isAiGenerated: true,
-    tags: ['garden', 'peaceful'],
-    isFavorite: false,
-    blockPalette: ['#C47B5C', '#E8C9A3', '#6FA5A0', '#3E5A48', '#D8526E'],
-    createdAt: '2026-04-19T11:00:00Z',
-    updatedAt: '2026-04-19T11:00:00Z',
-  },
-  {
-    id: 'build-deepslate-vault',
-    userId: 'user-1',
-    title: 'Deepslate Vault Chamber',
-    description: 'A massive underground storage complex with cyan lighting.',
-    category: 'storage',
-    difficulty: 'expert',
-    edition: 'java',
-    dimensions: { width: 24, height: 18, depth: 24 },
-    estimatedMinutes: 360,
-    materials: [],
-    phases: [],
-    markdownInstructions: '',
-    isAiGenerated: false,
-    tags: ['underground', 'storage'],
-    isFavorite: true,
-    blockPalette: ['#1B2330', '#2E3A4E', '#00B0D9', '#5A6A80', '#0A0D12'],
-    createdAt: '2026-04-20T08:00:00Z',
-    updatedAt: '2026-04-20T08:00:00Z',
-  },
-]
-
-const MOCK_NOTES: WorldNote[] = [
-  {
-    id: 'note-1',
-    userId: 'user-1',
-    label: 'Home Base',
-    x: 248,
-    y: 64,
-    z: -1192,
-    dimension: 'overworld',
-    pinColor: '#00CCFF',
-    createdAt: '2026-04-15T10:00:00Z',
-    updatedAt: '2026-04-15T10:00:00Z',
-  },
-  {
-    id: 'note-2',
-    userId: 'user-1',
-    label: 'Iron Mine',
-    description: 'Rich iron vein, bring lots of pickaxes',
-    x: -412,
-    y: 16,
-    z: 873,
-    dimension: 'overworld',
-    pinColor: '#8AA64A',
-    createdAt: '2026-04-16T14:20:00Z',
-    updatedAt: '2026-04-16T14:20:00Z',
-  },
-  {
-    id: 'note-3',
-    userId: 'user-1',
-    label: 'Nether Portal',
-    x: 108,
-    y: 68,
-    z: -240,
-    dimension: 'overworld',
-    pinColor: '#E8A23A',
-    createdAt: '2026-04-17T09:45:00Z',
-    updatedAt: '2026-04-17T09:45:00Z',
-  },
-  {
-    id: 'note-4',
-    userId: 'user-1',
-    label: 'Blaze Farm',
-    x: 54,
-    y: 48,
-    z: -110,
-    dimension: 'nether',
-    pinColor: '#FF4455',
-    createdAt: '2026-04-18T16:00:00Z',
-    updatedAt: '2026-04-18T16:00:00Z',
-  },
-  {
-    id: 'note-5',
-    userId: 'user-1',
-    label: 'Ancient City',
-    description: 'Found it while caving — lots of loot',
-    x: 312,
-    y: -45,
-    z: 608,
-    dimension: 'overworld',
-    pinColor: '#7BCF3F',
-    createdAt: '2026-04-20T12:30:00Z',
-    updatedAt: '2026-04-20T12:30:00Z',
-  },
-]
-
-const MOCK_ACTIVITIES: ActivityItem[] = [
-  {
-    id: 'act-1',
-    message: 'Completed "Foundation" phase on Mossy Oak Cottage',
-    timestamp: '2026-04-20T18:30:00Z',
-    type: 'complete',
-  },
-  {
-    id: 'act-2',
-    message: 'Saved Blackstone Lantern Tower to library',
-    timestamp: '2026-04-20T15:10:00Z',
-    type: 'save',
-  },
-  {
-    id: 'act-3',
-    message: 'Started Deepslate Vault Chamber build',
-    timestamp: '2026-04-20T08:05:00Z',
-    type: 'start',
-  },
-  {
-    id: 'act-4',
-    message: 'Completed "Excavation" phase on Deepslate Vault',
-    timestamp: '2026-04-19T21:00:00Z',
-    type: 'complete',
-  },
-  {
-    id: 'act-5',
-    message: 'Saved Willow Koi Pavilion design',
-    timestamp: '2026-04-19T11:35:00Z',
-    type: 'save',
-  },
-  {
-    id: 'act-6',
-    message: 'Started Willow Koi Pavilion build',
-    timestamp: '2026-04-19T10:00:00Z',
-    type: 'start',
-  },
-  {
-    id: 'act-7',
-    message: 'Completed all steps on Cherrywood Rope Bridge',
-    timestamp: '2026-04-18T19:45:00Z',
-    type: 'complete',
-  },
-  {
-    id: 'act-8',
-    message: 'Saved Blackstone Lantern Tower to favorites',
-    timestamp: '2026-04-18T14:20:00Z',
-    type: 'save',
-  },
-]
-
-/* ── Dashboard component ──────────────────────────────────────────────────── */
 
 export function Dashboard() {
   const navigate = useNavigate()
   const { theme } = useTheme()
 
+  const { builds, loading: buildsLoading } = useBuilds()
+  const { notes } = useWorldNotes()
+
+  /** Newest five builds (drives the Recent Builds grid & Activity feed). */
+  const recentBuilds = useMemo(() => {
+    return [...builds]
+      .sort(
+        (a, b) => new Date(readUpdatedAt(b)).getTime() - new Date(readUpdatedAt(a)).getTime(),
+      )
+      .slice(0, 3)
+  }, [builds])
+
+  /**
+   * Placeholder for the active project. A future iteration will pair
+   * this with a `useProjects()` list hook — for now we surface the most
+   * recent build as a proxy so the hero card has something to render.
+   */
+  const activeBuild: MinecraftBuild | undefined = recentBuilds[0]
+  const activeProject: BuildProject | null = activeBuild
+    ? {
+        id: `draft-${activeBuild.id}`,
+        userId: (activeBuild as unknown as { userId?: string }).userId ?? '',
+        buildId: activeBuild.id,
+        name: readTitle(activeBuild),
+        status: 'in-progress',
+        completedSteps: [],
+        collectedBlocks: [],
+        progress: { current: 0, total: 1 },
+        createdAt: readUpdatedAt(activeBuild),
+        updatedAt: readUpdatedAt(activeBuild),
+      }
+    : null
+
+  const activities: ActivityItem[] = useMemo(() => {
+    return builds
+      .slice(0, 8)
+      .map((b) => ({
+        id: `act-${b.id}`,
+        message: `Saved ${readTitle(b)} to library`,
+        timestamp: readUpdatedAt(b),
+        type: 'save' as const,
+      }))
+  }, [builds])
+
+  const completedCount = useMemo(
+    () =>
+      builds.filter(
+        (b) =>
+          (b as unknown as { status?: string }).status === 'done' ||
+          (b as unknown as { status?: string }).status === 'completed',
+      ).length,
+    [builds],
+  )
+
   return (
     <PageLayout
       title="Workshop"
-      subtitle={`${theme === 'blossom' ? '🌸 ' : '⚡ '}You and Pibble have 2 active builds. Let's keep crafting.`}
+      subtitle={`${theme === 'blossom' ? '🌸 ' : '⚡ '}${
+        buildsLoading
+          ? 'Loading your workshop…'
+          : `You and Pibble have ${Math.max(builds.length - completedCount, 0)} active builds. Let's keep crafting.`
+      }`}
       headerActions={
         <QuickActionsBar
           onGenerateBuild={() => navigate('/build-designer')}
@@ -282,26 +140,23 @@ export function Dashboard() {
       >
         <StatCard
           icon={Hammer}
-          value={2}
+          value={Math.max(builds.length - completedCount, 0)}
           label="Active Builds"
-          trend={{ value: 1, direction: 'up' }}
         />
         <StatCard
           icon={CheckCircle2}
-          value={14}
+          value={completedCount}
           label="Completed"
-          trend={{ value: 3, direction: 'up' }}
         />
         <StatCard
           icon={Layers}
-          value="28,431"
-          label="Blocks Placed"
+          value={builds.length}
+          label="Saved Builds"
         />
         <StatCard
           icon={Flame}
-          value="9 days"
-          label="Session Streak"
-          trend={{ value: 2, direction: 'up' }}
+          value={notes.length}
+          label="World Notes"
         />
       </div>
 
@@ -321,11 +176,19 @@ export function Dashboard() {
             title="Active Project"
             subtitle="Pick up where you left off"
           >
-            <ActiveProjectCard
-              project={MOCK_PROJECT}
-              build={MOCK_ACTIVE_BUILD}
-              onContinue={() => navigate(`/builds/${MOCK_ACTIVE_BUILD.id}`)}
-            />
+            {activeBuild && activeProject ? (
+              <ActiveProjectCard
+                project={activeProject}
+                build={activeBuild}
+                onContinue={() => navigate(`/builds/${activeBuild.id}`)}
+              />
+            ) : (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
+                {buildsLoading
+                  ? 'Loading your builds…'
+                  : 'No active builds yet. Generate one to get started!'}
+              </p>
+            )}
           </SectionCard>
 
           {/* Recent builds */}
@@ -342,22 +205,28 @@ export function Dashboard() {
               </button>
             }
           >
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 'var(--space-4)',
-              }}
-            >
-              {MOCK_RECENT_BUILDS.map((build) => (
-                <RecentBuildCard
-                  key={build.id}
-                  build={build}
-                  onStart={() => navigate(`/builds/${build.id}`)}
-                  onSave={() => navigate('/saved-builds')}
-                />
-              ))}
-            </div>
+            {recentBuilds.length === 0 ? (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
+                {buildsLoading ? 'Loading…' : 'Generate your first build to see it here.'}
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 'var(--space-4)',
+                }}
+              >
+                {recentBuilds.map((build) => (
+                  <RecentBuildCard
+                    key={build.id}
+                    build={build}
+                    onStart={() => navigate(`/builds/${build.id}`)}
+                    onSave={() => navigate('/saved-builds')}
+                  />
+                ))}
+              </div>
+            )}
           </SectionCard>
         </div>
 
@@ -366,14 +235,14 @@ export function Dashboard() {
           {/* World notes */}
           <SectionCard title="World Notes" subtitle="Coordinate pins">
             <WorldNotesWidget
-              notes={MOCK_NOTES}
+              notes={notes}
               onAddNote={() => navigate('/world-notes')}
             />
           </SectionCard>
 
           {/* Activity feed */}
           <SectionCard title="Recent Activity">
-            <ActivityFeed activities={MOCK_ACTIVITIES} />
+            <ActivityFeed activities={activities} />
           </SectionCard>
         </div>
       </div>
