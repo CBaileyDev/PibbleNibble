@@ -6,7 +6,8 @@
  * and a Continue button.
  */
 
-import type { MinecraftBuild, BuildProject, Difficulty } from '@/types/build'
+import type { MinecraftBuild, Difficulty } from '@/types/build'
+import type { BuildProject } from '@/types/project'
 import styles from './ActiveProjectCard.module.css'
 
 const FALLBACK_PALETTE = ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
@@ -22,6 +23,7 @@ const STATUS_LABEL: Record<BuildProject['status'], string> = {
   todo: 'To Do',
   'in-progress': 'In Progress',
   done: 'Done',
+  completed: 'Completed',
 }
 
 /** Props for ActiveProjectCard. */

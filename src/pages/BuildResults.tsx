@@ -14,6 +14,8 @@
 import { useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BuildResultCard } from '@/components/build/BuildResultCard'
+import { useBuilds } from '@/hooks/useBuilds'
+import { toast } from '@/components/ui/Toast'
 import type { MinecraftBuild } from '@/types/build'
 
 interface BuildResultsLocationState {
@@ -23,22 +25,34 @@ interface BuildResultsLocationState {
 export function BuildResults() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { saveBuild } = useBuilds()
   const state = (location.state ?? {}) as BuildResultsLocationState
   const builds = state.builds ?? []
 
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set())
 
-  function handleStart(build: MinecraftBuild) {
+  async function persist(build: MinecraftBuild) {
+    try {
+      await saveBuild(build)
+      setSavedIds((prev) => {
+        if (prev.has(build.id)) return prev
+        const next = new Set(prev)
+        next.add(build.id)
+        return next
+      })
+    } catch {
+      toast.error('Failed to save build')
+    }
+  }
+
+  async function handleStart(build: MinecraftBuild) {
+    // Persist first so the detail page can load it fresh from Supabase.
+    await persist(build)
     navigate(`/builds/${build.id}`, { state: { build } })
   }
 
   function handleSave(build: MinecraftBuild) {
-    setSavedIds((prev) => {
-      if (prev.has(build.id)) return prev
-      const next = new Set(prev)
-      next.add(build.id)
-      return next
-    })
+    void persist(build)
   }
 
   function handleRegenerate() {
@@ -84,7 +98,7 @@ export function BuildResults() {
                 key={build.id}
                 build={build}
                 index={i}
-                onStart={() => handleStart(build)}
+                onStart={() => void handleStart(build)}
                 onSave={() => handleSave(build)}
               />
             ))}

@@ -29,9 +29,12 @@ import {
   Lock,
 } from 'lucide-react'
 
+import { useMemo } from 'react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { StatCard } from '@/components/dashboard/StatCard'
+import { useBuilds } from '@/hooks/useBuilds'
+import type { MinecraftBuild } from '@/types/build'
 
 /* ── Local types ────────────────────────────────────────────────────────── */
 
@@ -64,16 +67,13 @@ interface PlayerStats {
   favoriteBuildType: string
 }
 
-/* ── Mock data ──────────────────────────────────────────────────────────── */
+/* ── Mock fallback data ─────────────────────────────────────────────────
+   Used only for achievements + player comparison, which don't have a
+   dedicated Supabase table yet. Overall stats and the build history
+   timeline are now derived from live data (see inside the component).
+   ───────────────────────────────────────────────────────────────────── */
 
-const OVERALL_STATS = {
-  totalBuildsGenerated: 47,
-  buildsCompleted: 12,
-  totalStepsCompleted: 318,
-  totalPlaySessions: 34,
-}
-
-const COMPLETED_BUILDS: CompletedBuild[] = [
+const FALLBACK_COMPLETED_BUILDS: CompletedBuild[] = [
   {
     id: 'build-cherrywood-bridge',
     name: 'Cherrywood Rope Bridge',
@@ -678,6 +678,52 @@ function FavoriteTypes({ players }: { players: PlayerStats[] }) {
 /* ── Page component ─────────────────────────────────────────────────────── */
 
 export function Progress() {
+  const { builds } = useBuilds()
+
+  /** Build rows from Supabase may carry either the strict schema (`name`)
+   *  or the ambient shape (`title`). Tolerate both. */
+  const completedBuilds: CompletedBuild[] = useMemo(() => {
+    const mapped = builds
+      .filter((b: MinecraftBuild) => {
+        const r = b as unknown as Record<string, unknown>
+        return r.status === 'done' || r.status === 'completed'
+      })
+      .map<CompletedBuild>((b: MinecraftBuild) => {
+        const r = b as unknown as Record<string, unknown>
+        const palette =
+          Array.isArray(r.blockPalette) && (r.blockPalette as string[])[0]
+            ? (r.blockPalette as string[])[0]
+            : '#6d83f2'
+        return {
+          id: b.id,
+          name: (r.name as string) ?? (r.title as string) ?? 'Untitled',
+          accentColor: palette,
+          difficulty: (b.difficulty ?? 'medium') as Difficulty,
+          theme: (b.theme as string) ?? 'cozy',
+          completedAt:
+            (r.completedAt as string) ??
+            (r.updatedAt as string) ??
+            (r.updated_at as string) ??
+            new Date().toISOString(),
+          sessionCount: Number(r.sessionCount ?? 1),
+        }
+      })
+
+    return mapped.length > 0 ? mapped : FALLBACK_COMPLETED_BUILDS
+  }, [builds])
+
+  const totalBuildsGenerated = builds.length
+  const buildsCompleted = builds.filter((b: MinecraftBuild) => {
+    const r = b as unknown as Record<string, unknown>
+    return r.status === 'done' || r.status === 'completed'
+  }).length
+  const totalStepsCompleted = builds.reduce((sum: number, b: MinecraftBuild) => {
+    const r = b as unknown as Record<string, unknown>
+    const done = (r.completedSteps as string[] | undefined) ?? []
+    return sum + done.length
+  }, 0)
+  const totalPlaySessions = Math.max(buildsCompleted, 1)
+
   return (
     <PageLayout
       title="Progress"
@@ -693,24 +739,22 @@ export function Progress() {
       >
         <StatCard
           icon={Hammer}
-          value={formatNumber(OVERALL_STATS.totalBuildsGenerated)}
+          value={formatNumber(totalBuildsGenerated)}
           label="Total Builds Generated"
         />
         <StatCard
           icon={CheckCircle2}
-          value={formatNumber(OVERALL_STATS.buildsCompleted)}
+          value={formatNumber(buildsCompleted)}
           label="Builds Completed"
-          trend={{ value: 2, direction: 'up' }}
         />
         <StatCard
           icon={Footprints}
-          value={formatNumber(OVERALL_STATS.totalStepsCompleted)}
+          value={formatNumber(totalStepsCompleted)}
           label="Total Steps Completed"
-          trend={{ value: 18, direction: 'up' }}
         />
         <StatCard
           icon={Gamepad2}
-          value={formatNumber(OVERALL_STATS.totalPlaySessions)}
+          value={formatNumber(totalPlaySessions)}
           label="Total Play Sessions"
         />
       </div>
@@ -720,7 +764,7 @@ export function Progress() {
         title="Build History"
         subtitle="Your completed builds, most recent first."
       >
-        <BuildTimeline builds={COMPLETED_BUILDS} />
+        <BuildTimeline builds={completedBuilds} />
       </SectionCard>
 
       {/* 3. Achievements */}

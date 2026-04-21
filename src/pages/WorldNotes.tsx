@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { toast } from '@/components/ui/Toast'
-import { useWorldNotes, useCreateWorldNote, useDeleteWorldNote } from '@/hooks/useWorldNotes'
+import { useWorldNotes } from '@/hooks/useWorldNotes'
 import { useUserStore } from '@/stores/userStore'
 import type { WorldNote } from '@/types/project'
 
@@ -32,9 +32,8 @@ const DIMENSION_EMOJI: Record<WorldNote['dimension'], string> = {
 
 export function WorldNotes() {
   const user = useUserStore((s) => s.user)
-  const { data: notes = [], isLoading } = useWorldNotes()
-  const { mutate: createNote, isPending: isCreating } = useCreateWorldNote()
-  const { mutate: deleteNote } = useDeleteWorldNote()
+  const { notes, loading, addNote, deleteNote } = useWorldNotes()
+  const [isCreating, setIsCreating] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [form, setForm] = useState({
     label: '', description: '', x: '', y: '', z: '',
@@ -42,11 +41,11 @@ export function WorldNotes() {
     pinColor: '#6d83f2',
   })
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!user || !form.label) return
-
-    createNote(
-      {
+    setIsCreating(true)
+    try {
+      await addNote({
         userId: user.id,
         label: form.label,
         description: form.description || undefined,
@@ -55,15 +54,15 @@ export function WorldNotes() {
         z: Number(form.z),
         dimension: form.dimension,
         pinColor: form.pinColor,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Note added!')
-          setIsOpen(false)
-          setForm({ label: '', description: '', x: '', y: '', z: '', dimension: 'overworld', pinColor: '#6d83f2' })
-        },
-      }
-    )
+      })
+      toast.success('Note added!')
+      setIsOpen(false)
+      setForm({ label: '', description: '', x: '', y: '', z: '', dimension: 'overworld', pinColor: '#6d83f2' })
+    } catch {
+      toast.error('Failed to add note')
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -79,7 +78,7 @@ export function WorldNotes() {
           </Button>
         </div>
 
-        {isLoading ? (
+        {loading ? (
           <div className="flex flex-col gap-2">
             {[1, 2, 3].map((n) => <div key={n} className="h-16 rounded-[var(--radius-lg)] bg-[var(--surface)] animate-pulse" />)}
           </div>
@@ -109,7 +108,7 @@ export function WorldNotes() {
                   )}
                 </div>
                 <button
-                  onClick={() => deleteNote(note.id)}
+                  onClick={() => void deleteNote(note.id)}
                   className="p-1.5 text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors rounded"
                   aria-label="Delete note"
                 >
@@ -134,7 +133,7 @@ export function WorldNotes() {
               <label className="text-sm font-medium text-[var(--text-secondary)]">Pin colour</label>
               <input type="color" value={form.pinColor} onChange={(e) => setForm((f) => ({ ...f, pinColor: e.target.value }))} className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] cursor-pointer p-1" />
             </div>
-            <Button onClick={handleCreate} isLoading={isCreating} className="w-full mt-1">
+            <Button onClick={() => void handleCreate()} isLoading={isCreating} className="w-full mt-1">
               Add Note
             </Button>
           </div>

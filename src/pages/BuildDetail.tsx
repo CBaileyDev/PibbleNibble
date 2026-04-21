@@ -1,9 +1,9 @@
 /**
  * pages/BuildDetail.tsx
  *
- * Full detail view for a saved build. Shows the phase tab bar,
- * step-by-step checklist, material checklist, and the markdown
- * narrative instructions side-by-side.
+ * Full detail view for a saved build. The build itself is fetched by
+ * `useBuild(id)`; per-player checklist state (current step, completed
+ * steps) comes from `useProject(buildId)`.
  */
 
 import { useState } from 'react'
@@ -17,16 +17,21 @@ import { StepCard } from '@/components/instructions/StepCard'
 import { MaterialChecklist } from '@/components/instructions/MaterialChecklist'
 import { BuildPreview } from '@/components/build/BuildPreview'
 import { useBuild } from '@/hooks/useBuilds'
-import { supabase } from '@/lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
+import { useProject } from '@/hooks/useProject'
+
+/** Read either the strict-schema `name` or the ambient `title` field. */
+function readTitle(b: unknown): string {
+  const r = b as Record<string, unknown>
+  return (r.name as string) ?? (r.title as string) ?? 'Untitled Build'
+}
 
 export function BuildDetail() {
   const { id } = useParams<{ id: string }>()
-  const { data: build, isLoading, error } = useBuild(id ?? '')
+  const { build, loading, error } = useBuild(id)
+  const { completedSteps, toggleStepComplete } = useProject(id ?? '')
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
-  const qc = useQueryClient()
 
-  if (isLoading) {
+  if (loading) {
     return (
       <PageLayout>
         <div className="max-w-4xl mx-auto animate-pulse flex flex-col gap-4">
@@ -45,23 +50,19 @@ export function BuildDetail() {
     )
   }
 
-  const currentPhaseId = activePhaseId ?? build.phases[0]?.id ?? ''
-  const activePhase = build.phases.find((p) => p.id === currentPhaseId)
+  const bundled = build as unknown as Record<string, unknown>
+  const phases =
+    (bundled.phases as Array<{ id?: string; phaseId?: number | string; steps?: Array<{ id?: string; stepId?: string }> }>) ??
+    []
 
-  async function handleStepToggle(stepId: string, completed: boolean) {
-    const updatedPhases = build!.phases.map((phase) => ({
-      ...phase,
-      steps: phase.steps.map((step) =>
-        step.id === stepId ? { ...step, isCompleted: completed } : step
-      ),
-    }))
+  const phaseIdOf = (p: { id?: string; phaseId?: number | string }): string =>
+    (p.id as string) ?? String(p.phaseId ?? '')
 
-    await supabase
-      .from('builds')
-      .update({ phases: updatedPhases, updated_at: new Date().toISOString() })
-      .eq('id', build!.id)
+  const currentPhaseId = activePhaseId ?? phaseIdOf(phases[0] ?? {})
+  const activePhase = phases.find((p) => phaseIdOf(p) === currentPhaseId)
 
-    void qc.invalidateQueries({ queryKey: ['builds', build!.id] })
+  async function handleStepToggle(stepId: string) {
+    await toggleStepComplete(stepId)
   }
 
   return (
@@ -70,11 +71,13 @@ export function BuildDetail() {
         {/* Header */}
         <div className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-xl font-bold text-[var(--text-primary)]">{build.title}</h2>
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
+              {readTitle(build)}
+            </h2>
             <div className="flex gap-1.5 shrink-0">
-              <Badge variant="default">{build.category}</Badge>
-              <Badge variant="accent">{build.difficulty}</Badge>
-              {build.isAiGenerated && <Badge variant="muted">AI</Badge>}
+              {bundled.category ? <Badge variant="default">{String(bundled.category)}</Badge> : null}
+              {build.difficulty ? <Badge variant="accent">{build.difficulty}</Badge> : null}
+              {bundled.isAiGenerated ? <Badge variant="muted">AI</Badge> : null}
             </div>
           </div>
           <p className="text-sm text-[var(--text-secondary)]">{build.description}</p>
@@ -86,14 +89,25 @@ export function BuildDetail() {
           {/* Steps — 3 cols */}
           <div className="lg:col-span-3 flex flex-col gap-0 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] overflow-hidden">
             <PhaseTabBar
-              phases={build.phases}
+              phases={phases as never}
               activePhaseId={currentPhaseId}
               onSelect={setActivePhaseId}
             />
             <div className="flex flex-col gap-2 p-4">
-              {activePhase?.steps.map((step) => (
-                <StepCard key={step.id} step={step} onToggle={handleStepToggle} />
-              ))}
+              {activePhase?.steps?.map((step) => {
+                const stepId = (step.id as string) ?? (step.stepId as string)
+                return (
+                  <StepCard
+                    key={stepId}
+                    step={{
+                      ...(step as Record<string, unknown>),
+                      id: stepId,
+                      isCompleted: completedSteps.has(stepId),
+                    } as never}
+                    onToggle={(sid: string) => void handleStepToggle(sid)}
+                  />
+                )
+              })}
             </div>
           </div>
 
@@ -104,9 +118,11 @@ export function BuildDetail() {
         </div>
 
         {/* Full instructions */}
-        <SectionCard title="Full Instructions">
-          <BuildPreview markdown={build.markdownInstructions} />
-        </SectionCard>
+        {typeof bundled.markdownInstructions === 'string' && (
+          <SectionCard title="Full Instructions">
+            <BuildPreview markdown={bundled.markdownInstructions as string} />
+          </SectionCard>
+        )}
       </div>
     </PageLayout>
   )

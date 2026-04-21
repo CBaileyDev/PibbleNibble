@@ -5,6 +5,35 @@
  * builds across To-do / In Progress / Done columns.
  */
 
+/** Lifecycle state of a BuildProject — the per-user attempt at a build. */
+export type ProjectStatus = 'todo' | 'in-progress' | 'done' | 'completed'
+
+/**
+ * A user's active attempt at a build. One BuildProject per (user, build)
+ * pair. Tracks which steps and materials they've checked off.
+ */
+export interface BuildProject {
+  id: string
+  userId: string
+  buildId: string
+  /** Optional display name — falls back to the build's own name. */
+  name?: string
+  status: ProjectStatus
+  /** Step id the player is currently on. */
+  currentStepId?: string
+  /** IDs of every step the player has marked complete. */
+  completedSteps: string[]
+  /** IDs of every material block the player has collected. */
+  collectedBlocks: string[]
+  /** Convenience progress pair — derived, persisted, or both. */
+  progress?: { current: number; total: number }
+  /** Human-friendly next-step label for dashboard cards. */
+  currentStepText?: string
+  startedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** The three kanban columns. */
 export type KanbanStatus = 'todo' | 'in_progress' | 'done'
 
