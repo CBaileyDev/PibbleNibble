@@ -14,6 +14,7 @@
 import { useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BuildResultCard } from '@/components/build/BuildResultCard'
+import { EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
 import { useBuilds } from '@/hooks/useBuilds'
 import { toast } from '@/components/ui/Toast'
 import type { MinecraftBuild } from '@/types/build'
@@ -356,54 +357,13 @@ function SparkleGlyph() {
 
 function EmptyState({ onRegenerate }: { onRegenerate: () => void }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 18,
-        padding: '72px 24px',
-        background: 'var(--bg-surface)',
-        border: '1px dashed var(--border-strong)',
-        borderRadius: 'var(--r-lg)',
-        textAlign: 'center',
-      }}
-    >
-      <span style={{ fontSize: 48, lineHeight: 1 }} aria-hidden="true">⛏️</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: 'var(--text-primary)',
-          }}
-        >
-          No builds to show
-        </h2>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            color: 'var(--text-secondary)',
-            maxWidth: 420,
-          }}
-        >
-          Head back to the designer and sketch out what you want — the AI
-          will return a batch of variations to choose from.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onRegenerate}
-        className="btn btn-primary"
-      >
-        Open Build Designer
-      </button>
-    </div>
+    <EmptyStateUI
+      icon="⛏️"
+      title="No builds to show"
+      subtitle="Head back to the designer and sketch out what you want — the AI will return a batch of variations to choose from."
+      ctaLabel="Open Build Designer"
+      onCta={onRegenerate}
+    />
   )
 }
 

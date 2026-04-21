@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { Badge } from '@/components/ui/Badge'
@@ -16,6 +16,7 @@ import { PhaseTabBar } from '@/components/instructions/PhaseTabBar'
 import { StepCard } from '@/components/instructions/StepCard'
 import { MaterialChecklist } from '@/components/instructions/MaterialChecklist'
 import { BuildPreview } from '@/components/build/BuildPreview'
+import { EmptyState, InstructionsSkeleton } from '@/components/ui/LoadingStates'
 import { useBuild } from '@/hooks/useBuilds'
 import { useProject } from '@/hooks/useProject'
 
@@ -27,6 +28,7 @@ function readTitle(b: unknown): string {
 
 export function BuildDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { build, loading, error } = useBuild(id)
   const { completedSteps, toggleStepComplete } = useProject(id ?? '')
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
@@ -34,10 +36,7 @@ export function BuildDetail() {
   if (loading) {
     return (
       <PageLayout>
-        <div className="max-w-4xl mx-auto animate-pulse flex flex-col gap-4">
-          <div className="h-8 bg-[var(--surface)] rounded-[var(--radius-md)] w-1/2" />
-          <div className="h-48 bg-[var(--surface)] rounded-[var(--radius-lg)]" />
-        </div>
+        <InstructionsSkeleton />
       </PageLayout>
     )
   }
@@ -45,7 +44,15 @@ export function BuildDetail() {
   if (error || !build) {
     return (
       <PageLayout>
-        <p className="text-center text-[var(--text-muted)] py-16">Build not found.</p>
+        <EmptyState
+          icon="🧭"
+          title="Build not found"
+          subtitle="This build may have been deleted, or the link might be out of date."
+          ctaLabel="Browse saved builds"
+          onCta={() => navigate('/saved-builds')}
+          secondaryLabel="Generate a new one"
+          onSecondary={() => navigate('/build-designer')}
+        />
       </PageLayout>
     )
   }
