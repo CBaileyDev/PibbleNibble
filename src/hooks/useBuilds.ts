@@ -11,7 +11,7 @@
  * whitelist — both directions. No spread, no stray keys, no casts.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUserStore } from '@/stores/userStore'
 import type {
@@ -123,6 +123,7 @@ export function useBuilds() {
   const [builds, setBuilds] = useState<MinecraftBuild[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
+  const refetchTimer = useRef<number | null>(null)
 
   const fetchSavedBuilds = useCallback(async (): Promise<MinecraftBuild[]> => {
     if (!userId) {
@@ -184,9 +185,12 @@ export function useBuilds() {
   }, [])
 
   useEffect(() => {
-    void fetchSavedBuilds().catch(() => {
-      /* state already set */
-    })
+    let active = true
+    const runFetch = () => {
+      if (!active) return
+      void fetchSavedBuilds().catch(() => undefined)
+    }
+    runFetch()
 
     if (!userId) return
     const channel = supabase
@@ -194,18 +198,53 @@ export function useBuilds() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'builds',
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          void fetchSavedBuilds().catch(() => undefined)
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'builds',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'builds',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
         },
       )
       .subscribe()
 
     return () => {
+      active = false
+      if (refetchTimer.current) {
+        window.clearTimeout(refetchTimer.current)
+        refetchTimer.current = null
+      }
       void supabase.removeChannel(channel)
     }
   }, [userId, fetchSavedBuilds])

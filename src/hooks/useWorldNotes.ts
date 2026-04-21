@@ -7,7 +7,7 @@
  * DB columns are snake_case; the hook converts at the boundary.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { WorldNote } from '@/types/project'
 
@@ -34,6 +34,7 @@ export function useWorldNotes() {
   const [notes, setNotes] = useState<WorldNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
+  const refetchTimer = useRef<number | null>(null)
 
   const fetchNotes = useCallback(async () => {
     setLoading(true)
@@ -94,20 +95,50 @@ export function useWorldNotes() {
   }, [])
 
   useEffect(() => {
-    void fetchNotes()
+    let active = true
+    const runFetch = () => {
+      if (!active) return
+      void fetchNotes()
+    }
+    runFetch()
 
     const channel = supabase
       .channel('world_notes_realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'world_notes' },
+        { event: 'INSERT', schema: 'public', table: 'world_notes' },
         () => {
-          void fetchNotes()
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'world_notes' },
+        () => {
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'world_notes' },
+        () => {
+          if (!active) return
+          if (refetchTimer.current) window.clearTimeout(refetchTimer.current)
+          refetchTimer.current = window.setTimeout(runFetch, 120)
         },
       )
       .subscribe()
 
     return () => {
+      active = false
+      if (refetchTimer.current) {
+        window.clearTimeout(refetchTimer.current)
+        refetchTimer.current = null
+      }
       void supabase.removeChannel(channel)
     }
   }, [fetchNotes])
