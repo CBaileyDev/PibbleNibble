@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BuildResultCard } from '@/components/build/BuildResultCard'
 import { EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
-import { useBuilds } from '@/hooks/useBuilds'
+import { useSaveBuild } from '@/hooks/useBuilds'
 import { toast } from '@/components/ui/Toast'
 import type { MinecraftBuild } from '@/types/build'
 
@@ -27,10 +27,9 @@ interface BuildResultsLocationState {
 export function BuildResults() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { saveBuild } = useBuilds()
+  const saveMutation = useSaveBuild()
   const state = (location.state ?? {}) as BuildResultsLocationState
   const builds = state.builds ?? []
-  const warnings = state.warnings ?? []
 
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set())
 
@@ -38,6 +37,7 @@ export function BuildResults() {
   const announcedRef = useRef(false)
   useEffect(() => {
     if (announcedRef.current) return
+    const warnings = state.warnings ?? []
     if (warnings.length === 0) return
     announcedRef.current = true
     const summary =
@@ -45,11 +45,11 @@ export function BuildResults() {
         ? warnings[0]
         : `${warnings.length} adjustments made by the validator.`
     toast.info(summary)
-  }, [warnings])
+  }, [state.warnings])
 
   async function persist(build: MinecraftBuild) {
     try {
-      await saveBuild(build)
+      await saveMutation.mutateAsync(build)
       setSavedIds((prev) => {
         if (prev.has(build.id)) return prev
         const next = new Set(prev)

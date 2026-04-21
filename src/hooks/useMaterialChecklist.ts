@@ -10,106 +10,109 @@
  *   • resetAll()        — clear every collected block
  *   • collectedCount    — materials the player has finished gathering
  *   • totalCount        — total distinct materials in the bill
+ *
+ * Backed by TanStack Query with an optimistic mutation for toggle/reset.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { qk } from '@/lib/queryKeys'
 import type { MaterialItem } from '@/types/build'
 
-type Err = Error | null
+interface ChecklistData {
+  materials: MaterialItem[]
+  collected: string[]
+}
+
+async function fetchChecklist(projectId: string): Promise<ChecklistData> {
+  const { data: project, error: projectErr } = await supabase
+    .from('projects')
+    .select('build_id, collected_blocks')
+    .eq('id', projectId)
+    .maybeSingle()
+
+  if (projectErr) throw projectErr
+  if (!project) throw new Error('Project not found')
+
+  const { data: build, error: buildErr } = await supabase
+    .from('builds')
+    .select('materials')
+    .eq('id', (project as { build_id: string }).build_id)
+    .maybeSingle()
+
+  if (buildErr) throw buildErr
+  if (!build) throw new Error('Build not found')
+
+  return {
+    materials:
+      ((build as { materials: MaterialItem[] | null }).materials ?? []) as MaterialItem[],
+    collected:
+      ((project as { collected_blocks: string[] | null }).collected_blocks ?? []) as string[],
+  }
+}
 
 export function useMaterialChecklist(projectId: string) {
-  const [materials, setMaterials] = useState<MaterialItem[]>([])
-  const [collected, setCollected] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
+  const queryClient = useQueryClient()
+  const queryKey = qk.materialChecklist(projectId)
 
-  const collectedRef = useRef<string[]>([])
-  collectedRef.current = collected
+  const query = useQuery<ChecklistData, Error>({
+    queryKey,
+    enabled: !!projectId,
+    queryFn: () => fetchChecklist(projectId),
+  })
 
-  const fetchChecklist = useCallback(async () => {
-    if (!projectId) {
-      setMaterials([])
-      setCollected([])
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    const { data: project, error: projectErr } = await supabase
-      .from('projects')
-      .select('build_id, collected_blocks')
-      .eq('id', projectId)
-      .maybeSingle()
-
-    if (projectErr || !project) {
-      setError(projectErr ?? new Error('Project not found'))
-      setLoading(false)
-      return
-    }
-
-    const { data: build, error: buildErr } = await supabase
-      .from('builds')
-      .select('materials')
-      .eq('id', (project as { build_id: string }).build_id)
-      .maybeSingle()
-
-    if (buildErr || !build) {
-      setError(buildErr ?? new Error('Build not found'))
-      setLoading(false)
-      return
-    }
-
-    setMaterials(
-      ((build as { materials: MaterialItem[] | null }).materials ?? []) as MaterialItem[],
-    )
-    setCollected(
-      ((project as { collected_blocks: string[] | null }).collected_blocks ?? []) as string[],
-    )
-    setLoading(false)
-  }, [projectId])
-
-  const writeCollected = useCallback(
-    async (next: string[]) => {
-      const prev = collectedRef.current
-      setCollected(next)
-      const { error: err } = await supabase
+  const writeMutation = useMutation<
+    string[],
+    Error,
+    string[],
+    { previous: ChecklistData | undefined }
+  >({
+    mutationFn: async (next: string[]) => {
+      const { error } = await supabase
         .from('projects')
         .update({
           collected_blocks: next,
           updated_at: new Date().toISOString(),
         })
         .eq('id', projectId)
-      if (err) {
-        // Roll back optimistic update.
-        setCollected(prev)
-        setError(err)
-        throw err
-      }
+      if (error) throw error
+      return next
     },
-    [projectId],
-  )
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<ChecklistData>(queryKey)
+      if (previous) {
+        queryClient.setQueryData<ChecklistData>(queryKey, {
+          ...previous,
+          collected: next,
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _next, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(queryKey, ctx.previous)
+    },
+  })
+
+  const current = query.data
 
   const toggleCollected = useCallback(
     async (blockId: string): Promise<void> => {
-      const current = collectedRef.current
-      const next = current.includes(blockId)
-        ? current.filter((id) => id !== blockId)
-        : [...current, blockId]
-      await writeCollected(next)
+      const collected = current?.collected ?? []
+      const next = collected.includes(blockId)
+        ? collected.filter((id) => id !== blockId)
+        : [...collected, blockId]
+      await writeMutation.mutateAsync(next)
     },
-    [writeCollected],
+    [current?.collected, writeMutation],
   )
 
   const resetAll = useCallback(async (): Promise<void> => {
-    await writeCollected([])
-  }, [writeCollected])
+    await writeMutation.mutateAsync([])
+  }, [writeMutation])
 
   useEffect(() => {
-    void fetchChecklist()
-
     if (!projectId) return
     const channel = supabase
       .channel(`checklist_${projectId}_realtime`)
@@ -122,7 +125,7 @@ export function useMaterialChecklist(projectId: string) {
           filter: `id=eq.${projectId}`,
         },
         () => {
-          void fetchChecklist()
+          void queryClient.invalidateQueries({ queryKey })
         },
       )
       .subscribe()
@@ -130,23 +133,34 @@ export function useMaterialChecklist(projectId: string) {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [projectId, fetchChecklist])
+  }, [projectId, queryClient, queryKey])
 
-  const collectedSet = new Set(collected)
-  const collectedCount = materials.reduce(
-    (n, m) => (collectedSet.has(m.blockId) ? n + 1 : n),
-    0,
-  )
-  const totalCount = materials.length
+  const materials = current?.materials
+  const collected = current?.collected
+
+  const { collectedCount, totalCount, materialsOut, collectedOut } = useMemo(() => {
+    const mats = materials ?? []
+    const col = collected ?? []
+    const set = new Set(col)
+    return {
+      collectedCount: mats.reduce(
+        (n, m) => (set.has(m.blockId) ? n + 1 : n),
+        0,
+      ),
+      totalCount: mats.length,
+      materialsOut: mats,
+      collectedOut: col,
+    }
+  }, [materials, collected])
 
   return {
-    materials,
-    collectedBlocks: collected,
+    materials: materialsOut,
+    collectedBlocks: collectedOut,
     toggleCollected,
     resetAll,
     collectedCount,
     totalCount,
-    loading,
-    error,
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
   }
 }

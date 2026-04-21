@@ -4,14 +4,15 @@
  * Realtime-subscribed list of world notes. Both players in a shared
  * world see each other's pins appear, move, and disappear live.
  *
- * DB columns are snake_case; the hook converts at the boundary.
+ * DB columns are snake_case; the hook converts at the boundary. Backed
+ * by TanStack Query so subsequent consumers share the same cache.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { qk } from '@/lib/queryKeys'
 import type { WorldNote } from '@/types/project'
-
-type Err = Error | null
 
 function rowToNote(row: Record<string, unknown>): WorldNote {
   return {
@@ -30,29 +31,28 @@ function rowToNote(row: Record<string, unknown>): WorldNote {
   }
 }
 
+async function fetchNotes(): Promise<WorldNote[]> {
+  const { data, error } = await supabase
+    .from('world_notes')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => rowToNote(r as Record<string, unknown>))
+}
+
 export function useWorldNotes() {
-  const [notes, setNotes] = useState<WorldNote[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
+  const queryClient = useQueryClient()
+  const queryKey = qk.worldNotes()
 
-  const fetchNotes = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    const { data, error: err } = await supabase
-      .from('world_notes')
-      .select('*')
-      .order('created_at', { ascending: false })
+  const query = useQuery<WorldNote[], Error>({
+    queryKey,
+    queryFn: fetchNotes,
+  })
 
-    if (err) {
-      setError(err)
-    } else {
-      setNotes((data ?? []).map((r) => rowToNote(r as Record<string, unknown>)))
-    }
-    setLoading(false)
-  }, [])
-
-  const addNote = useCallback(
-    async (note: Omit<WorldNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> => {
+  const addMutation = useMutation({
+    mutationFn: async (
+      note: Omit<WorldNote, 'id' | 'createdAt' | 'updatedAt'>,
+    ) => {
       const now = new Date().toISOString()
       const row = {
         user_id: note.userId,
@@ -67,42 +67,42 @@ export function useWorldNotes() {
         created_at: now,
         updated_at: now,
       }
-      const { data, error: err } = await supabase
+      const { data, error } = await supabase
         .from('world_notes')
         .insert(row)
         .select()
         .single()
-
-      if (err) {
-        setError(err)
-        throw err
-      }
-      if (data) {
-        setNotes((prev) => [rowToNote(data as Record<string, unknown>), ...prev])
-      }
+      if (error) throw error
+      return rowToNote(data as Record<string, unknown>)
     },
-    [],
-  )
+    onSuccess: (note) => {
+      queryClient.setQueryData<WorldNote[]>(queryKey, (prev) =>
+        prev ? [note, ...prev] : [note],
+      )
+    },
+  })
 
-  const deleteNote = useCallback(async (id: string): Promise<void> => {
-    const { error: err } = await supabase.from('world_notes').delete().eq('id', id)
-    if (err) {
-      setError(err)
-      throw err
-    }
-    setNotes((prev) => prev.filter((n) => n.id !== id))
-  }, [])
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('world_notes').delete().eq('id', id)
+      if (error) throw error
+      return id
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData<WorldNote[]>(queryKey, (prev) =>
+        (prev ?? []).filter((n) => n.id !== id),
+      )
+    },
+  })
 
   useEffect(() => {
-    void fetchNotes()
-
     const channel = supabase
       .channel('world_notes_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'world_notes' },
         () => {
-          void fetchNotes()
+          void queryClient.invalidateQueries({ queryKey })
         },
       )
       .subscribe()
@@ -110,7 +110,17 @@ export function useWorldNotes() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [fetchNotes])
+  }, [queryClient, queryKey])
 
-  return { notes, loading, error, addNote, deleteNote, fetchNotes }
+  return {
+    notes: query.data ?? [],
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+    addNote: async (note: Omit<WorldNote, 'id' | 'createdAt' | 'updatedAt'>) => {
+      await addMutation.mutateAsync(note)
+    },
+    deleteNote: async (id: string) => {
+      await deleteMutation.mutateAsync(id)
+    },
+  }
 }

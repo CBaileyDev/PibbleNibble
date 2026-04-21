@@ -2,7 +2,7 @@
  * hooks/useProject.ts
  *
  * Tracks the player's per-build project row. One project per
- * (user, build) pair; created lazily on first interaction.
+ * (user, build) pair; created lazily on first fetch.
  *
  * The project row stores:
  *   • status            — 'todo' | 'in-progress' | 'done' | 'completed'
@@ -12,14 +12,13 @@
  * `completedSteps` is exposed as a `Set<string>` for cheap membership checks.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { qk } from '@/lib/queryKeys'
 import { useUserStore } from '@/stores/userStore'
 import type { BuildProject, ProjectStatus } from '@/types/project'
 
-type Err = Error | null
-
-/** DB row → BuildProject. */
 function rowToProject(row: Record<string, unknown>): BuildProject {
   return {
     id: row.id as string,
@@ -37,138 +36,116 @@ function rowToProject(row: Record<string, unknown>): BuildProject {
   }
 }
 
+async function fetchOrCreateProject(
+  buildId: string,
+  userId: string,
+): Promise<BuildProject> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('build_id', buildId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  if (data) return rowToProject(data as Record<string, unknown>)
+
+  const now = new Date().toISOString()
+  const { data: created, error: createErr } = await supabase
+    .from('projects')
+    .insert({
+      user_id: userId,
+      build_id: buildId,
+      status: 'todo',
+      completed_steps: [],
+      collected_blocks: [],
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single()
+  if (createErr) throw createErr
+  return rowToProject(created as Record<string, unknown>)
+}
+
 export function useProject(buildId: string) {
   const userId = useUserStore((s) => s.user?.id)
+  const queryClient = useQueryClient()
+  const queryKey = qk.project(buildId, userId)
 
-  const [project, setProject] = useState<BuildProject | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
+  const query = useQuery<BuildProject | null, Error>({
+    queryKey,
+    enabled: !!buildId && !!userId,
+    queryFn: () => fetchOrCreateProject(buildId, userId as string),
+  })
 
-  const projectRef = useRef<BuildProject | null>(null)
-  projectRef.current = project
+  const project = query.data ?? null
 
-  /** Fetch-or-create the project row for this (user, build). */
-  const fetchProject = useCallback(async () => {
-    if (!buildId || !userId) {
-      setProject(null)
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
-
-    const { data, error: err } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('build_id', buildId)
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (err) {
-      setError(err)
-      setLoading(false)
-      return
-    }
-
-    if (data) {
-      setProject(rowToProject(data as Record<string, unknown>))
-      setLoading(false)
-      return
-    }
-
-    // No existing row — lazily create one in 'todo' state.
-    const now = new Date().toISOString()
-    const { data: created, error: createErr } = await supabase
-      .from('projects')
-      .insert({
-        user_id: userId,
-        build_id: buildId,
-        status: 'todo',
-        completed_steps: [],
-        collected_blocks: [],
-        created_at: now,
-        updated_at: now,
-      })
-      .select()
-      .single()
-
-    if (createErr) {
-      setError(createErr)
-      setLoading(false)
-      return
-    }
-    setProject(rowToProject(created as Record<string, unknown>))
-    setLoading(false)
-  }, [buildId, userId])
-
-  /** Patch the project row and locally mirror the change. */
-  const patchProject = useCallback(
-    async (patch: Record<string, unknown>, local: Partial<BuildProject>) => {
-      const current = projectRef.current
-      if (!current) return
+  const patchMutation = useMutation({
+    mutationFn: async ({
+      patch,
+      local,
+    }: {
+      patch: Record<string, unknown>
+      local: Partial<BuildProject>
+    }) => {
+      if (!project) return null
       const now = new Date().toISOString()
-      const { error: err } = await supabase
+      const { error } = await supabase
         .from('projects')
         .update({ ...patch, updated_at: now })
-        .eq('id', current.id)
-      if (err) {
-        setError(err)
-        throw err
-      }
-      setProject((prev) =>
-        prev ? { ...prev, ...local, updatedAt: now } : prev,
-      )
+        .eq('id', project.id)
+      if (error) throw error
+      return { ...project, ...local, updatedAt: now } satisfies BuildProject
     },
-    [],
-  )
+    onSuccess: (next) => {
+      if (next) queryClient.setQueryData<BuildProject | null>(queryKey, next)
+    },
+  })
 
   const updateStatus = useCallback(
     async (status: ProjectStatus): Promise<void> => {
-      await patchProject({ status }, { status })
+      await patchMutation.mutateAsync({ patch: { status }, local: { status } })
     },
-    [patchProject],
+    [patchMutation],
   )
 
   const updateCurrentStep = useCallback(
     async (stepId: string): Promise<void> => {
-      await patchProject(
-        { current_step_id: stepId },
-        { currentStepId: stepId },
-      )
+      await patchMutation.mutateAsync({
+        patch: { current_step_id: stepId },
+        local: { currentStepId: stepId },
+      })
     },
-    [patchProject],
+    [patchMutation],
   )
 
   const toggleStepComplete = useCallback(
     async (stepId: string): Promise<void> => {
-      const current = projectRef.current
-      if (!current) return
-      const has = current.completedSteps.includes(stepId)
+      if (!project) return
+      const has = project.completedSteps.includes(stepId)
       const nextSteps = has
-        ? current.completedSteps.filter((s) => s !== stepId)
-        : [...current.completedSteps, stepId]
+        ? project.completedSteps.filter((s) => s !== stepId)
+        : [...project.completedSteps, stepId]
 
-      // Auto-bump status based on completion progress.
-      let status: ProjectStatus | undefined
-      if (nextSteps.length > 0 && current.status === 'todo') {
-        status = 'in-progress'
-      }
+      // Auto-bump status on first step completion.
+      const bump =
+        nextSteps.length > 0 && project.status === 'todo'
+          ? ({ status: 'in-progress' as ProjectStatus } as const)
+          : null
 
-      await patchProject(
-        status
-          ? { completed_steps: nextSteps, status }
+      await patchMutation.mutateAsync({
+        patch: bump
+          ? { completed_steps: nextSteps, status: bump.status }
           : { completed_steps: nextSteps },
-        status
-          ? { completedSteps: nextSteps, status }
+        local: bump
+          ? { completedSteps: nextSteps, status: bump.status }
           : { completedSteps: nextSteps },
-      )
+      })
     },
-    [patchProject],
+    [patchMutation, project],
   )
 
   useEffect(() => {
-    void fetchProject()
-
     if (!buildId || !userId) return
     const channel = supabase
       .channel(`project_${buildId}_${userId}_realtime`)
@@ -181,7 +158,7 @@ export function useProject(buildId: string) {
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          void fetchProject()
+          void queryClient.invalidateQueries({ queryKey })
         },
       )
       .subscribe()
@@ -189,7 +166,7 @@ export function useProject(buildId: string) {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [buildId, userId, fetchProject])
+  }, [buildId, userId, queryClient, queryKey])
 
   const completedSteps = useMemo(
     () => new Set(project?.completedSteps ?? []),
@@ -198,8 +175,8 @@ export function useProject(buildId: string) {
 
   return {
     project,
-    loading,
-    error,
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
     completedSteps,
     updateStatus,
     updateCurrentStep,

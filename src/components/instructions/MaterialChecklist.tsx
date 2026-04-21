@@ -18,13 +18,6 @@ interface MaterialChecklistProps {
   build: MinecraftBuild
 }
 
-/** Display-name accessor — the strict schema uses `blockName`, but some
- *  legacy rows may carry `name` or `minecraftId`. */
-function displayName(m: MaterialItem): string {
-  const r = m as unknown as Record<string, unknown>
-  return (m.blockName as string) ?? (r.name as string) ?? (m.blockId as string)
-}
-
 export function MaterialChecklist({ build }: MaterialChecklistProps) {
   // The project hook resolves (or creates) the per-user project row for
   // this build. We need its id to drive the checklist hook.
@@ -116,7 +109,7 @@ export function MaterialChecklist({ build }: MaterialChecklistProps) {
                       : 'text-[var(--text-primary)]'
                   }`}
                 >
-                  {displayName(material)}
+                  {material.blockName}
                 </p>
                 <p className="text-xs text-[var(--text-muted)] font-mono">
                   {material.blockId}

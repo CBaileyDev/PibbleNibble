@@ -1,9 +1,9 @@
 /**
  * hooks/useBuilds.ts
  *
- * Live view of every MinecraftBuild the user has saved. Fetches on
- * mount, subscribes to realtime changes on the `builds` table, and
- * exposes imperative save / delete helpers.
+ * Live view of every MinecraftBuild the user has saved. Backed by
+ * TanStack Query for caching and deduping; realtime changes on the
+ * `builds` table invalidate the cached query.
  *
  * Row layout: the `builds` table uses an explicit column list (see
  * supabase/migrations/0001_initial_schema.sql). We convert snake_case
@@ -11,8 +11,10 @@
  * whitelist — both directions. No spread, no stray keys, no casts.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { qk } from '@/lib/queryKeys'
 import { useUserStore } from '@/stores/userStore'
 import type {
   Biome,
@@ -28,8 +30,6 @@ import type {
   ValidationReport,
   VisualPreview,
 } from '@/types/build'
-
-type Err = Error | null
 
 // ─── Row shape (mirror of the builds table) ───────────────────────────────────
 
@@ -111,59 +111,42 @@ function buildToRow(build: MinecraftBuild, userId: string): Omit<BuildRow, 'crea
 }
 
 /**
- * Main builds collection hook.
- *
- * Returns the user's builds along with imperative helpers. The list is
- * kept fresh by a realtime subscription on the `builds` table — any
- * INSERT / UPDATE / DELETE triggers a refetch.
+ * Fetch the full builds collection for a given user. Exported so the
+ * sliced hooks (useRecentBuilds, useCompletedBuilds) share one cache.
  */
-export function useBuilds() {
+async function fetchBuilds(userId: string): Promise<MinecraftBuild[]> {
+  const { data, error } = await supabase
+    .from('builds')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => rowToBuild(r as BuildRow))
+}
+
+/**
+ * Shared mutation helpers for saving and deleting builds. Both route
+ * through the same `qk.builds(userId)` cache so pages that select
+ * slices (recent, completed) observe the same source of truth.
+ */
+export function useSaveBuild() {
   const userId = useUserStore((s) => s.user?.id)
+  const queryClient = useQueryClient()
+  const queryKey = qk.builds(userId)
 
-  const [builds, setBuilds] = useState<MinecraftBuild[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
-
-  const fetchSavedBuilds = useCallback(async (): Promise<MinecraftBuild[]> => {
-    if (!userId) {
-      setBuilds([])
-      setLoading(false)
-      return []
-    }
-    setLoading(true)
-    setError(null)
-    const { data, error: err } = await supabase
-      .from('builds')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-
-    if (err) {
-      setError(err)
-      setLoading(false)
-      throw err
-    }
-
-    const next = (data ?? []).map((r) => rowToBuild(r as BuildRow))
-    setBuilds(next)
-    setLoading(false)
-    return next
-  }, [userId])
-
-  const saveBuild = useCallback(
-    async (build: MinecraftBuild): Promise<void> => {
+  return useMutation({
+    mutationFn: async (build: MinecraftBuild) => {
       if (!userId) throw new Error('Cannot save build: not authenticated')
       const row = buildToRow(build, userId)
-      const { error: err } = await supabase
+      const { error } = await supabase
         .from('builds')
         .upsert(row, { onConflict: 'id' })
-
-      if (err) {
-        setError(err)
-        throw err
-      }
-      // Optimistic local merge — realtime will follow up.
-      setBuilds((prev) => {
+      if (error) throw error
+      return build
+    },
+    onSuccess: (build) => {
+      queryClient.setQueryData<MinecraftBuild[]>(queryKey, (prev) => {
+        if (!prev) return [build]
         const idx = prev.findIndex((b) => b.id === build.id)
         if (idx === -1) return [build, ...prev]
         const next = [...prev]
@@ -171,23 +154,45 @@ export function useBuilds() {
         return next
       })
     },
-    [userId],
-  )
+  })
+}
 
-  const deleteBuild = useCallback(async (id: string): Promise<void> => {
-    const { error: err } = await supabase.from('builds').delete().eq('id', id)
-    if (err) {
-      setError(err)
-      throw err
-    }
-    setBuilds((prev) => prev.filter((b) => b.id !== id))
-  }, [])
+export function useDeleteBuild() {
+  const userId = useUserStore((s) => s.user?.id)
+  const queryClient = useQueryClient()
+  const queryKey = qk.builds(userId)
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('builds').delete().eq('id', id)
+      if (error) throw error
+      return id
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData<MinecraftBuild[]>(queryKey, (prev) =>
+        (prev ?? []).filter((b) => b.id !== id),
+      )
+    },
+  })
+}
+
+/**
+ * Main builds collection hook. Returns the user's builds with cached
+ * loading/error state and imperative save/delete helpers; the cache is
+ * kept fresh by a realtime subscription on the `builds` table.
+ */
+export function useBuilds() {
+  const userId = useUserStore((s) => s.user?.id)
+  const queryClient = useQueryClient()
+  const queryKey = qk.builds(userId)
+
+  const query = useQuery<MinecraftBuild[], Error>({
+    queryKey,
+    enabled: !!userId,
+    queryFn: () => fetchBuilds(userId as string),
+  })
 
   useEffect(() => {
-    void fetchSavedBuilds().catch(() => {
-      /* state already set */
-    })
-
     if (!userId) return
     const channel = supabase
       .channel(`builds_${userId}_realtime`)
@@ -200,7 +205,7 @@ export function useBuilds() {
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          void fetchSavedBuilds().catch(() => undefined)
+          void queryClient.invalidateQueries({ queryKey })
         },
       )
       .subscribe()
@@ -208,56 +213,83 @@ export function useBuilds() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [userId, fetchSavedBuilds])
+  }, [userId, queryClient, queryKey])
+
+  const saveMutation = useSaveBuild()
+  const deleteMutation = useDeleteBuild()
 
   return {
-    builds,
-    loading,
-    error,
-    fetchSavedBuilds,
-    saveBuild,
-    deleteBuild,
+    builds: query.data ?? [],
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+    saveBuild: async (build: MinecraftBuild) => {
+      await saveMutation.mutateAsync(build)
+    },
+    deleteBuild: async (id: string) => {
+      await deleteMutation.mutateAsync(id)
+    },
   }
 }
 
 /**
- * Single-build fetcher — used by BuildDetail and anywhere else that
- * needs one record by id. Shares the boundary logic with `useBuilds`.
+ * Sliced view — newest N builds. Shares the `qk.builds(userId)` cache
+ * with `useBuilds()` so pages don't refetch when both are mounted.
+ */
+export function useRecentBuilds(limit = 3) {
+  const userId = useUserStore((s) => s.user?.id)
+
+  const selectRecent = useMemo(
+    () => (data: MinecraftBuild[]) => {
+      return [...data]
+        .sort(
+          (a, b) =>
+            new Date(b.generatedAt).getTime() -
+            new Date(a.generatedAt).getTime(),
+        )
+        .slice(0, limit)
+    },
+    [limit],
+  )
+
+  const query = useQuery<MinecraftBuild[], Error, MinecraftBuild[]>({
+    queryKey: qk.builds(userId),
+    enabled: !!userId,
+    queryFn: () => fetchBuilds(userId as string),
+    select: selectRecent,
+  })
+
+  return {
+    builds: query.data ?? [],
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+  }
+}
+
+/**
+ * Single-build fetcher — used by BuildDetail. Scoped to the authed user
+ * for defense in depth over RLS.
  */
 export function useBuild(id: string | undefined) {
   const userId = useUserStore((s) => s.user?.id)
+  const queryClient = useQueryClient()
+  const queryKey = qk.build(id, userId)
 
-  const [build, setBuild] = useState<MinecraftBuild | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
-
-  const refetch = useCallback(async () => {
-    if (!id || !userId) {
-      setBuild(null)
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    const { data, error: err } = await supabase
-      .from('builds')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (err) {
-      setError(err)
-      setBuild(null)
-    } else {
-      setBuild(data ? rowToBuild(data as BuildRow) : null)
-    }
-    setLoading(false)
-  }, [id, userId])
+  const query = useQuery<MinecraftBuild | null, Error>({
+    queryKey,
+    enabled: !!id && !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('builds')
+        .select('*')
+        .eq('id', id as string)
+        .eq('user_id', userId as string)
+        .maybeSingle()
+      if (error) throw error
+      return data ? rowToBuild(data as BuildRow) : null
+    },
+  })
 
   useEffect(() => {
-    void refetch()
-
     if (!id) return
     const channel = supabase
       .channel(`build_${id}_realtime`)
@@ -265,15 +297,21 @@ export function useBuild(id: string | undefined) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'builds', filter: `id=eq.${id}` },
         () => {
-          void refetch()
+          void queryClient.invalidateQueries({ queryKey })
         },
       )
       .subscribe()
-
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [id, refetch])
+  }, [id, queryClient, queryKey])
 
-  return { build, loading, error, refetch }
+  return {
+    build: query.data ?? null,
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+    refetch: async () => {
+      await query.refetch()
+    },
+  }
 }

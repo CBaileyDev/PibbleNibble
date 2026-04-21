@@ -5,10 +5,15 @@
  * targeted mutators for theme, display name, and the preferences
  * JSONB column. The Zustand user store is kept in sync for theme
  * updates so the UI re-skins immediately.
+ *
+ * Backed by TanStack Query — the cached profile is shared across
+ * pages that render the user's display name/theme.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { qk } from '@/lib/queryKeys'
 import { useUserStore } from '@/stores/userStore'
 import {
   DEFAULT_USER_PREFERENCES,
@@ -16,8 +21,6 @@ import {
   type UserPreferences,
   type UserProfile,
 } from '@/types/user'
-
-type Err = Error | null
 
 function rowToProfile(row: Record<string, unknown>): UserProfile {
   return {
@@ -36,96 +39,96 @@ function rowToProfile(row: Record<string, unknown>): UserProfile {
   }
 }
 
+async function fetchProfile(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('auth_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data ? rowToProfile(data as Record<string, unknown>) : null
+}
+
 export function useUserProfile() {
   const userId = useUserStore((s) => s.user?.id)
   const setStoreTheme = useUserStore((s) => s.setTheme)
+  const queryClient = useQueryClient()
+  const queryKey = qk.userProfile(userId)
 
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Err>(null)
+  const query = useQuery<UserProfile | null, Error>({
+    queryKey,
+    enabled: !!userId,
+    queryFn: () => fetchProfile(userId as string),
+  })
 
-  const profileRef = useRef<UserProfile | null>(null)
-  profileRef.current = profile
+  const profile = query.data ?? null
 
-  const fetchProfile = useCallback(async () => {
-    if (!userId) {
-      setProfile(null)
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    const { data, error: err } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('auth_id', userId)
-      .maybeSingle()
-
-    if (err) {
-      setError(err)
-      setProfile(null)
-    } else if (data) {
-      setProfile(rowToProfile(data as Record<string, unknown>))
-    }
-    setLoading(false)
-  }, [userId])
-
-  const patch = useCallback(
-    async (row: Record<string, unknown>, local: Partial<UserProfile>) => {
-      if (!userId) return
+  const patchMutation = useMutation({
+    mutationFn: async ({
+      row,
+      local,
+    }: {
+      row: Record<string, unknown>
+      local: Partial<UserProfile>
+    }) => {
+      if (!userId) throw new Error('Not authenticated')
       const now = new Date().toISOString()
-      const { error: err } = await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ ...row, updated_at: now })
         .eq('auth_id', userId)
-      if (err) {
-        setError(err)
-        throw err
-      }
-      setProfile((prev) => (prev ? { ...prev, ...local, updatedAt: now } : prev))
+      if (error) throw error
+      return { local, updatedAt: now }
     },
-    [userId],
-  )
+    onSuccess: ({ local, updatedAt }) => {
+      queryClient.setQueryData<UserProfile | null>(queryKey, (prev) =>
+        prev ? { ...prev, ...local, updatedAt } : prev,
+      )
+    },
+  })
 
   const updateTheme = useCallback(
     async (theme: Theme): Promise<void> => {
-      await patch({ theme }, { theme })
+      await patchMutation.mutateAsync({ row: { theme }, local: { theme } })
       setStoreTheme(theme)
     },
-    [patch, setStoreTheme],
+    [patchMutation, setStoreTheme],
   )
 
   const updateDisplayName = useCallback(
     async (name: string): Promise<void> => {
-      await patch({ display_name: name }, { displayName: name })
+      await patchMutation.mutateAsync({
+        row: { display_name: name },
+        local: { displayName: name },
+      })
     },
-    [patch],
+    [patchMutation],
   )
 
   const updatePreferences = useCallback(
     async (prefs: Partial<UserPreferences>): Promise<void> => {
-      const current = profileRef.current
       const nextPrefs: UserPreferences = {
         ...DEFAULT_USER_PREFERENCES,
-        ...(current?.preferences ?? {}),
+        ...(profile?.preferences ?? {}),
         ...prefs,
       }
-      await patch({ preferences: nextPrefs }, { preferences: nextPrefs })
+      await patchMutation.mutateAsync({
+        row: { preferences: nextPrefs },
+        local: { preferences: nextPrefs },
+      })
     },
-    [patch],
+    [patchMutation, profile?.preferences],
   )
-
-  useEffect(() => {
-    void fetchProfile()
-  }, [fetchProfile])
 
   return {
     profile,
-    loading,
-    error,
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
     updateTheme,
     updateDisplayName,
     updatePreferences,
-    refetch: fetchProfile,
+    refetch: async () => {
+      await query.refetch()
+    },
   }
 }
