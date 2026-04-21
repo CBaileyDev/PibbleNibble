@@ -83,6 +83,31 @@ export interface MinecraftBuild {
   /** Cover image URL (screenshot or generated). */
   imageUrl?: string
   isFavorite: boolean
+  /** Hex color palette derived from primary block types — used for thumbnails. */
+  blockPalette?: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** Tracks a user's in-progress journey through a specific MinecraftBuild. */
+export interface BuildProject {
+  id: string
+  userId: string
+  /** The build this project tracks. */
+  buildId: string
+  /** Display name — defaults to the linked build's title. */
+  name: string
+  /** Kanban-style workflow status. */
+  status: 'todo' | 'in-progress' | 'done'
+  /** Step-level progress within the build. */
+  progress: {
+    current: number
+    total: number
+  }
+  /** Human-readable description of the current active step shown on the card. */
+  currentStepText?: string
+  startedAt?: string
+  completedAt?: string
   createdAt: string
   updatedAt: string
 }

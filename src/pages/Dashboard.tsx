@@ -1,410 +1,382 @@
-import { useState } from 'react'
+/**
+ * pages/Dashboard.tsx
+ *
+ * Main hub page for Pibble & Nibble. Composes all dashboard widgets using
+ * static mock data until Supabase is wired in Phase 7.
+ *
+ * Layout:
+ *   PageLayout
+ *   ├── Stats row (4 × StatCard)
+ *   ├── QuickActionsBar
+ *   └── Two-column main grid
+ *       ├── Left  — ActiveProjectCard + Recent Builds grid
+ *       └── Right — WorldNotesWidget + ActivityFeed
+ */
+
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { BuildCard } from '@/components/build/BuildCard'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { PaletteStrip } from '@/components/ui/PaletteStrip'
-import { ChunkyProgress } from '@/components/ui/ChunkyProgress'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { DiffBadge } from '@/components/ui/DiffBadge'
-import { useBuilds } from '@/hooks/useBuilds'
-import { useUserStore } from '@/stores/userStore'
-import { toBuildDisplay } from '@/lib/buildDisplay'
-import { MOCK_BUILDS, MOCK_COMPACT } from '@/lib/mockBuilds'
-import type { BuildDisplayData, BuildStatus } from '@/types/display'
+import {
+  Hammer,
+  CheckCircle2,
+  Layers,
+  Flame,
+} from 'lucide-react'
 
-const FILTER_TABS: { id: BuildStatus | 'all'; label: string }[] = [
-  { id: 'all',         label: 'All' },
-  { id: 'todo',        label: 'To Do' },
-  { id: 'in-progress', label: 'In Progress' },
-  { id: 'completed',   label: 'Completed' },
+import { PageLayout } from '@/components/layout/PageLayout'
+import { SectionCard } from '@/components/layout/SectionCard'
+import { useTheme } from '@/hooks/useTheme'
+
+import { StatCard } from '@/components/dashboard/StatCard'
+import { ActiveProjectCard } from '@/components/dashboard/ActiveProjectCard'
+import { RecentBuildCard } from '@/components/dashboard/RecentBuildCard'
+import { QuickActionsBar } from '@/components/dashboard/QuickActionsBar'
+import { WorldNotesWidget } from '@/components/dashboard/WorldNotesWidget'
+import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
+import type { ActivityItem } from '@/components/dashboard/ActivityFeed'
+
+import type { MinecraftBuild, BuildProject } from '@/types/build'
+import type { WorldNote } from '@/types/project'
+
+/* ── Mock data ───────────────────────────────────────────────────────────────
+   All data is static for Phase 1–6. Phase 7 replaces these constants with
+   Supabase queries / React Query hooks.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+const MOCK_ACTIVE_BUILD: MinecraftBuild = {
+  id: 'build-mossy-cottage',
+  userId: 'user-1',
+  title: 'Mossy Oak Cottage',
+  description: 'A cozy woodland retreat with stone hearth and herb garden.',
+  category: 'house',
+  difficulty: 'medium',
+  edition: 'java',
+  dimensions: { width: 12, height: 8, depth: 10 },
+  estimatedMinutes: 90,
+  materials: [],
+  phases: [],
+  markdownInstructions: '',
+  isAiGenerated: true,
+  tags: ['cozy', 'forest'],
+  isFavorite: true,
+  blockPalette: ['#5E4028', '#7A5638', '#8AA64A', '#C9B180', '#4B5D2E'],
+  createdAt: '2026-04-10T10:00:00Z',
+  updatedAt: '2026-04-20T18:30:00Z',
+}
+
+const MOCK_PROJECT: BuildProject = {
+  id: 'proj-1',
+  userId: 'user-1',
+  buildId: MOCK_ACTIVE_BUILD.id,
+  name: 'Mossy Oak Cottage',
+  status: 'in-progress',
+  progress: { current: 9, total: 24 },
+  currentStepText: 'Place the oak log frame for the second-floor walls',
+  startedAt: '2026-04-15T09:00:00Z',
+  createdAt: '2026-04-15T09:00:00Z',
+  updatedAt: '2026-04-20T18:30:00Z',
+}
+
+const MOCK_RECENT_BUILDS: MinecraftBuild[] = [
+  {
+    id: 'build-lantern-tower',
+    userId: 'user-1',
+    title: 'Blackstone Lantern Tower',
+    description: 'A tall nether-themed tower lit by soul lanterns.',
+    category: 'landmark',
+    difficulty: 'hard',
+    edition: 'java',
+    dimensions: { width: 9, height: 22, depth: 9 },
+    estimatedMinutes: 180,
+    materials: [],
+    phases: [],
+    markdownInstructions: '',
+    isAiGenerated: true,
+    tags: ['nether', 'tower'],
+    isFavorite: false,
+    blockPalette: ['#1E1A1E', '#3C2F30', '#E8A23A', '#8B6B3F', '#0F0D10'],
+    createdAt: '2026-04-18T14:00:00Z',
+    updatedAt: '2026-04-18T14:00:00Z',
+  },
+  {
+    id: 'build-koi-pavilion',
+    userId: 'user-1',
+    title: 'Willow Koi Pavilion',
+    description: 'A tranquil garden pavilion with a koi pond and cherry trees.',
+    category: 'decoration',
+    difficulty: 'easy',
+    edition: 'both',
+    dimensions: { width: 16, height: 6, depth: 14 },
+    estimatedMinutes: 45,
+    materials: [],
+    phases: [],
+    markdownInstructions: '',
+    isAiGenerated: true,
+    tags: ['garden', 'peaceful'],
+    isFavorite: false,
+    blockPalette: ['#C47B5C', '#E8C9A3', '#6FA5A0', '#3E5A48', '#D8526E'],
+    createdAt: '2026-04-19T11:00:00Z',
+    updatedAt: '2026-04-19T11:00:00Z',
+  },
+  {
+    id: 'build-deepslate-vault',
+    userId: 'user-1',
+    title: 'Deepslate Vault Chamber',
+    description: 'A massive underground storage complex with cyan lighting.',
+    category: 'storage',
+    difficulty: 'expert',
+    edition: 'java',
+    dimensions: { width: 24, height: 18, depth: 24 },
+    estimatedMinutes: 360,
+    materials: [],
+    phases: [],
+    markdownInstructions: '',
+    isAiGenerated: false,
+    tags: ['underground', 'storage'],
+    isFavorite: true,
+    blockPalette: ['#1B2330', '#2E3A4E', '#00B0D9', '#5A6A80', '#0A0D12'],
+    createdAt: '2026-04-20T08:00:00Z',
+    updatedAt: '2026-04-20T08:00:00Z',
+  },
 ]
 
-const STAT_ITEMS = [
-  { label: 'Active Builds',  key: 'active',    value: '2'      },
-  { label: 'Completed',      key: 'completed',  value: '14'     },
-  { label: 'Blocks Placed',  key: 'blocks',     value: '28,431', mono: true },
-  { label: 'Session Streak', key: 'streak',     value: '9 days' },
+const MOCK_NOTES: WorldNote[] = [
+  {
+    id: 'note-1',
+    userId: 'user-1',
+    label: 'Home Base',
+    x: 248,
+    y: 64,
+    z: -1192,
+    dimension: 'overworld',
+    pinColor: '#00CCFF',
+    createdAt: '2026-04-15T10:00:00Z',
+    updatedAt: '2026-04-15T10:00:00Z',
+  },
+  {
+    id: 'note-2',
+    userId: 'user-1',
+    label: 'Iron Mine',
+    description: 'Rich iron vein, bring lots of pickaxes',
+    x: -412,
+    y: 16,
+    z: 873,
+    dimension: 'overworld',
+    pinColor: '#8AA64A',
+    createdAt: '2026-04-16T14:20:00Z',
+    updatedAt: '2026-04-16T14:20:00Z',
+  },
+  {
+    id: 'note-3',
+    userId: 'user-1',
+    label: 'Nether Portal',
+    x: 108,
+    y: 68,
+    z: -240,
+    dimension: 'overworld',
+    pinColor: '#E8A23A',
+    createdAt: '2026-04-17T09:45:00Z',
+    updatedAt: '2026-04-17T09:45:00Z',
+  },
+  {
+    id: 'note-4',
+    userId: 'user-1',
+    label: 'Blaze Farm',
+    x: 54,
+    y: 48,
+    z: -110,
+    dimension: 'nether',
+    pinColor: '#FF4455',
+    createdAt: '2026-04-18T16:00:00Z',
+    updatedAt: '2026-04-18T16:00:00Z',
+  },
+  {
+    id: 'note-5',
+    userId: 'user-1',
+    label: 'Ancient City',
+    description: 'Found it while caving — lots of loot',
+    x: 312,
+    y: -45,
+    z: 608,
+    dimension: 'overworld',
+    pinColor: '#7BCF3F',
+    createdAt: '2026-04-20T12:30:00Z',
+    updatedAt: '2026-04-20T12:30:00Z',
+  },
 ]
+
+const MOCK_ACTIVITIES: ActivityItem[] = [
+  {
+    id: 'act-1',
+    message: 'Completed "Foundation" phase on Mossy Oak Cottage',
+    timestamp: '2026-04-20T18:30:00Z',
+    type: 'complete',
+  },
+  {
+    id: 'act-2',
+    message: 'Saved Blackstone Lantern Tower to library',
+    timestamp: '2026-04-20T15:10:00Z',
+    type: 'save',
+  },
+  {
+    id: 'act-3',
+    message: 'Started Deepslate Vault Chamber build',
+    timestamp: '2026-04-20T08:05:00Z',
+    type: 'start',
+  },
+  {
+    id: 'act-4',
+    message: 'Completed "Excavation" phase on Deepslate Vault',
+    timestamp: '2026-04-19T21:00:00Z',
+    type: 'complete',
+  },
+  {
+    id: 'act-5',
+    message: 'Saved Willow Koi Pavilion design',
+    timestamp: '2026-04-19T11:35:00Z',
+    type: 'save',
+  },
+  {
+    id: 'act-6',
+    message: 'Started Willow Koi Pavilion build',
+    timestamp: '2026-04-19T10:00:00Z',
+    type: 'start',
+  },
+  {
+    id: 'act-7',
+    message: 'Completed all steps on Cherrywood Rope Bridge',
+    timestamp: '2026-04-18T19:45:00Z',
+    type: 'complete',
+  },
+  {
+    id: 'act-8',
+    message: 'Saved Blackstone Lantern Tower to favorites',
+    timestamp: '2026-04-18T14:20:00Z',
+    type: 'save',
+  },
+]
+
+/* ── Dashboard component ──────────────────────────────────────────────────── */
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const [filter, setFilter] = useState<BuildStatus | 'all'>('all')
-  const user = useUserStore((s) => s.user)
-
-  const { data: rawBuilds = [] } = useBuilds()
-
-  const builds: BuildDisplayData[] =
-    rawBuilds.length > 0 ? rawBuilds.map(toBuildDisplay) : MOCK_BUILDS
-
-  const compactBuilds: BuildDisplayData[] = MOCK_COMPACT
-
-  const featured = builds.find((b) => b.status === 'in-progress') ?? builds[0]
-
-  const filtered =
-    filter === 'all' ? builds : builds.filter((b) => b.status === filter)
-
-  const displayName = user?.profile.displayName ?? 'Nibble'
+  const { theme } = useTheme()
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        maxWidth: 1320,
-        margin: '0 auto',
-        padding: '36px 28px 80px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 48,
-      }}
+    <PageLayout
+      title="Workshop"
+      subtitle={`${theme === 'blossom' ? '🌸 ' : '⚡ '}You and Pibble have 2 active builds. Let's keep crafting.`}
+      headerActions={
+        <QuickActionsBar
+          onGenerateBuild={() => navigate('/build-designer')}
+          onViewBuilds={() => navigate('/saved-builds')}
+          onOpenChecklists={() => navigate('/progress')}
+        />
+      }
     >
-      {/* ── Welcome + stats ── */}
-      <section>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-            marginBottom: 24,
-            flexWrap: 'wrap',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-              ◆ Evening Session · Day 47
-            </span>
-            <h1
-              style={{
-                margin: 0,
-                fontFamily: 'var(--font-display)',
-                fontWeight: 700,
-                fontSize: 44,
-                lineHeight: 1.25,
-                letterSpacing: '0.015em',
-                color: 'var(--text-primary)',
-              }}
-            >
-              Welcome back, {displayName}
-            </h1>
-            <p style={{ margin: 0, fontSize: 15, color: 'var(--text-secondary)' }}>
-              You and Pibble have {builds.filter((b) => b.status === 'in-progress').length} active builds. Let's keep crafting.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Button variant="secondary">Explore</Button>
-            <Button variant="primary" onClick={() => navigate('/build-designer')}>
-              ✦ Generate New Build
-            </Button>
-          </div>
-        </div>
-
-        <StatsRow />
-      </section>
-
-      {/* ── Featured active build ── */}
-      {featured && (
-        <section>
-          <SectionHeader kicker="CONTINUE" title="Your Active Build">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/saved-builds')}>
-              All projects →
-            </Button>
-          </SectionHeader>
-          <FeaturedBuild build={featured} />
-        </section>
-      )}
-
-      {/* ── Recently generated compact grid ── */}
-      <section>
-        <SectionHeader kicker="RECENTLY GENERATED" title="Fresh from the Forge">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/saved-builds')}>
-            See library →
-          </Button>
-        </SectionHeader>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 16,
-          }}
-        >
-          {compactBuilds.map((b) => (
-            <BuildCard key={b.id} build={b} compact />
-          ))}
-        </div>
-      </section>
-
-      {/* ── Full library ── */}
-      <section>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 18,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              FULL LIBRARY
-            </span>
-            <h2
-              style={{
-                margin: '4px 0 0',
-                fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                fontSize: 32,
-                letterSpacing: '0.02em',
-                color: 'var(--text-primary)',
-              }}
-            >
-              All Your Builds
-            </h2>
-          </div>
-
-          <div className="tabs">
-            {FILTER_TABS.map((t) => (
-              <button
-                key={t.id}
-                className={`tab ${filter === t.id ? 'active' : ''}`}
-                onClick={() => setFilter(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 20,
-          }}
-        >
-          {filtered.map((b) => (
-            <BuildCard key={b.id} build={b} />
-          ))}
-        </div>
-      </section>
-    </motion.div>
-  )
-}
-
-/* ── Stat tiles ── */
-function StatsRow() {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-      {STAT_ITEMS.map((s) => (
-        <Card key={s.key} style={{ padding: '18px 20px' }}>
-          <div style={{ marginBottom: 10 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              {s.label}
-            </span>
-          </div>
-          <div
-            style={{
-              fontFamily: s.mono ? 'var(--font-mono)' : 'var(--font-display)',
-              fontSize: 30,
-              fontWeight: 700,
-              letterSpacing: '0.01em',
-              color: 'var(--text-primary)',
-              lineHeight: 1,
-            }}
-          >
-            {s.value}
-          </div>
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-/* ── Section header ── */
-function SectionHeader({
-  kicker,
-  title,
-  children,
-}: {
-  kicker: string
-  title: string
-  children?: React.ReactNode
-}) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginBottom: 18,
-      }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-          {kicker}
-        </span>
-        <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            fontSize: 32,
-            letterSpacing: '0.02em',
-            color: 'var(--text-primary)',
-          }}
-        >
-          {title}
-        </h2>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-/* ── Featured build (large hero card) ── */
-function FeaturedBuild({ build }: { build: BuildDisplayData }) {
-  const navigate = useNavigate()
-  return (
-    <Card
-      style={{
-        overflow: 'hidden',
-        display: 'grid',
-        gridTemplateColumns: '1.1fr 1fr',
-      }}
-    >
-      {/* Left: gradient preview panel */}
+      {/* ── Stats row ── */}
       <div
         style={{
-          position: 'relative',
-          background: `linear-gradient(135deg, ${build.palette[0]} 0%, ${build.palette[1]} 50%, ${build.palette[3]} 100%)`,
-          minHeight: 300,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 'var(--space-4)',
         }}
       >
-        <PaletteStrip colors={build.palette} height={22} />
-
-        {/* Diagonal texture overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 0,
-            backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.08) 0 2px, transparent 2px 12px)',
-            pointerEvents: 'none',
-          }}
+        <StatCard
+          icon={Hammer}
+          value={2}
+          label="Active Builds"
+          trend={{ value: 1, direction: 'up' }}
         />
-
-        {/* Coordinates chip */}
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            margin: 24,
-            padding: '16px 18px',
-            background: 'rgba(0,0,0,0.55)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 3,
-            alignSelf: 'flex-end',
-            color: '#FFF',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-          }}
-        >
-          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: '0.1em', marginBottom: 4 }}>
-            COORDINATES
-          </div>
-          X: 248 · Y: 64 · Z: -1,192
-        </div>
+        <StatCard
+          icon={CheckCircle2}
+          value={14}
+          label="Completed"
+          trend={{ value: 3, direction: 'up' }}
+        />
+        <StatCard
+          icon={Layers}
+          value="28,431"
+          label="Blocks Placed"
+        />
+        <StatCard
+          icon={Flame}
+          value="9 days"
+          label="Session Streak"
+          trend={{ value: 2, direction: 'up' }}
+        />
       </div>
 
-      {/* Right: build info */}
-      <div style={{ padding: 30, display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <StatusBadge status={build.status} />
-          <DiffBadge level={build.difficulty} />
-          {build.biome && <span className="badge badge-neutral">{build.biome}</span>}
-        </div>
-
-        <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontWeight: 700,
-            fontSize: 40,
-            lineHeight: 1.1,
-            letterSpacing: '0.015em',
-            color: 'var(--text-primary)',
-          }}
-        >
-          {build.name}
-        </h2>
-
-        <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0, maxWidth: 440 }}>
-          A cozy woodland retreat tucked into the hillside. Features a stone hearth,
-          reading nook, and an herb garden out back. Built together with Pibble.
-        </p>
-
-        {/* Stats row */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 16,
-            padding: '14px 0',
-            borderTop: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <StatPill label="Dimensions" value={build.dims} mono />
-          <div style={{ width: 1, background: 'var(--border)', alignSelf: 'stretch' }} />
-          <StatPill
-            label="Progress"
-            value={build.progress ? `${build.progress.current}/${build.steps} steps` : `${build.steps} steps`}
-            mono
-          />
-          <div style={{ width: 1, background: 'var(--border)', alignSelf: 'stretch' }} />
-          <StatPill label="Last Session" value="2h ago" />
-        </div>
-
-        {build.progress && (
-          <ChunkyProgress value={build.progress.current} max={build.progress.total} />
-        )}
-
-        <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-          <Button variant="primary" onClick={() => navigate('/saved-builds')}>
-            Continue Building →
-          </Button>
-          <Button variant="secondary">
-            View Steps
-          </Button>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function StatPill({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-        {label}
-      </span>
-      <span
+      {/* ── Two-column main layout ── */}
+      <div
         style={{
-          fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body)',
-          fontSize: 15,
-          fontWeight: 600,
-          color: 'var(--text-primary)',
+          display: 'grid',
+          gridTemplateColumns: '1fr 320px',
+          gap: 'var(--space-5)',
+          alignItems: 'start',
         }}
       >
-        {value}
-      </span>
-    </div>
+        {/* Left column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+          {/* Active project */}
+          <SectionCard
+            title="Active Project"
+            subtitle="Pick up where you left off"
+          >
+            <ActiveProjectCard
+              project={MOCK_PROJECT}
+              build={MOCK_ACTIVE_BUILD}
+              onContinue={() => navigate(`/builds/${MOCK_ACTIVE_BUILD.id}`)}
+            />
+          </SectionCard>
+
+          {/* Recent builds */}
+          <SectionCard
+            title="Fresh from the Forge"
+            subtitle="Recently generated builds"
+            headerAction={
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate('/saved-builds')}
+                style={{ fontSize: '0.8125rem', color: 'var(--accent)' }}
+              >
+                See library →
+              </button>
+            }
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 'var(--space-4)',
+              }}
+            >
+              {MOCK_RECENT_BUILDS.map((build) => (
+                <RecentBuildCard
+                  key={build.id}
+                  build={build}
+                  onStart={() => navigate(`/builds/${build.id}`)}
+                  onSave={() => navigate('/saved-builds')}
+                />
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+          {/* World notes */}
+          <SectionCard title="World Notes" subtitle="Coordinate pins">
+            <WorldNotesWidget
+              notes={MOCK_NOTES}
+              onAddNote={() => navigate('/world-notes')}
+            />
+          </SectionCard>
+
+          {/* Activity feed */}
+          <SectionCard title="Recent Activity">
+            <ActivityFeed activities={MOCK_ACTIVITIES} />
+          </SectionCard>
+        </div>
+      </div>
+    </PageLayout>
   )
 }

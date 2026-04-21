@@ -1,74 +1,66 @@
 /**
  * components/dashboard/WorldNotesWidget.tsx
  *
- * Compact list of the most recent world notes/coordinate pins,
- * shown in the Dashboard's sidebar column. Refreshes in real-time
- * via the useWorldNotes Realtime subscription.
+ * Compact list of the user's most recent coordinate pins.
+ * Accepts a pre-fetched notes array — does not own its data source
+ * so the parent can swap in Supabase data in Phase 7.
  */
 
-import { MapPin } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { useWorldNotes } from '@/hooks/useWorldNotes'
+import { MapPin, Plus } from 'lucide-react'
+import type { WorldNote } from '@/types/project'
+import styles from './WorldNotesWidget.module.css'
 
-export function WorldNotesWidget() {
-  const { data: notes, isLoading } = useWorldNotes()
+const DIMENSION_EMOJI: Record<WorldNote['dimension'], string> = {
+  overworld: '🌿',
+  nether: '🔥',
+  end: '🌑',
+}
 
-  if (isLoading) {
+/** Props for WorldNotesWidget. */
+export interface WorldNotesWidgetProps {
+  /** Coordinate pins to display (shows first 5). */
+  notes: WorldNote[]
+  /** Called when the user clicks the Add Note button. */
+  onAddNote: () => void
+}
+
+export function WorldNotesWidget({ notes, onAddNote }: WorldNotesWidgetProps) {
+  if (!notes.length) {
     return (
-      <div className="flex flex-col gap-2">
-        {[1, 2, 3].map((n) => (
-          <div key={n} className="h-10 rounded-[var(--radius-md)] bg-[var(--bg-tertiary)] animate-pulse" />
-        ))}
+      <div className={styles.empty}>
+        <p className={styles.emptyText}>No coordinate pins yet.</p>
+        <button className="btn btn-secondary btn-sm" onClick={onAddNote}>
+          <Plus size={13} />
+          Add First Pin
+        </button>
       </div>
     )
   }
 
-  if (!notes?.length) {
-    return (
-      <p className="text-sm text-[var(--text-muted)] text-center py-4">
-        No notes yet.{' '}
-        <Link to="/world-notes" className="text-[var(--accent)] hover:underline">
-          Add one →
-        </Link>
-      </p>
-    )
-  }
-
-  const DIMENSION_EMOJI: Record<string, string> = {
-    overworld: '🌿',
-    nether:    '🔥',
-    end:       '🌑',
-  }
-
   return (
-    <div className="flex flex-col gap-1.5">
-      {notes.slice(0, 5).map((note) => (
-        <div
-          key={note.id}
-          className="flex items-center gap-2 p-2 rounded-[var(--radius-md)] hover:bg-[var(--surface-raised)] transition-colors"
-        >
-          <MapPin
-            size={13}
-            className="shrink-0"
-            style={{ color: note.pinColor }}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-[var(--text-primary)] truncate">{note.label}</p>
-            <p className="text-xs text-[var(--text-muted)] font-mono">
-              {DIMENSION_EMOJI[note.dimension]} {note.x}, {note.y}, {note.z}
-            </p>
+    <div className={styles.widget}>
+      <div className={styles.list}>
+        {notes.slice(0, 5).map((note) => (
+          <div key={note.id} className={styles.item}>
+            <MapPin
+              size={12}
+              className={styles.pinIcon}
+              style={{ color: note.pinColor }}
+            />
+            <div className={styles.noteInfo}>
+              <span className={styles.noteLabel}>{note.label}</span>
+              <span className={styles.noteCoords}>
+                {DIMENSION_EMOJI[note.dimension]}&nbsp;{note.x}, {note.y}, {note.z}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
-      {notes.length > 5 && (
-        <Link
-          to="/world-notes"
-          className="text-xs text-[var(--accent)] hover:underline text-right mt-1"
-        >
-          View all {notes.length} →
-        </Link>
-      )}
+      <button className={`btn btn-ghost btn-sm ${styles.addBtn}`} onClick={onAddNote}>
+        <Plus size={13} />
+        Add Note
+      </button>
     </div>
   )
 }

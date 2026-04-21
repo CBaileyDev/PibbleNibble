@@ -1,42 +1,54 @@
 /**
  * components/dashboard/StatCard.tsx
  *
- * Small KPI tile shown at the top of the Dashboard (total builds,
- * materials gathered, tasks done, etc.). Accepts a Lucide icon.
+ * KPI tile shown in the stats row at the top of the Dashboard.
+ * Accepts any Lucide icon and an optional trend indicator.
  */
 
-import { type ReactNode } from 'react'
-import { Card } from '@/components/ui/Card'
+import type { LucideIcon } from 'lucide-react'
+import styles from './StatCard.module.css'
 
-interface StatCardProps {
-  label: string
-  value: string | number
-  icon: ReactNode
-  delta?: string
-  deltaPositive?: boolean
+/** Direction of a trend movement. */
+export type TrendDirection = 'up' | 'down'
+
+/** Trend data attached to a stat metric. */
+export interface TrendData {
+  /** Absolute change value (e.g. 3 for +3 builds). */
+  value: number
+  direction: TrendDirection
 }
 
-export function StatCard({ label, value, icon, delta, deltaPositive }: StatCardProps) {
+/** Props for the StatCard KPI tile. */
+export interface StatCardProps {
+  /** Lucide icon rendered inside the accent bubble. */
+  icon: LucideIcon
+  /** Primary metric value — displayed in large display numerals. */
+  value: string | number
+  /** Short descriptive label below the value. */
+  label: string
+  /** Optional trend indicator showing recent movement. */
+  trend?: TrendData
+}
+
+export function StatCard({ icon: Icon, value, label, trend }: StatCardProps) {
   return (
-    <Card className="p-4 flex items-start gap-3">
-      <div className="p-2 rounded-[var(--radius-md)] bg-[var(--accent-subtle)] text-[var(--accent)] shrink-0">
-        {icon}
+    <div className={styles.card}>
+      <div className={styles.iconWrap}>
+        <Icon size={18} strokeWidth={2} />
       </div>
-      <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="text-xs text-[var(--text-muted)] font-medium">{label}</span>
-        <span className="text-xl font-bold text-[var(--text-primary)] tabular-nums leading-none">
-          {value}
-        </span>
-        {delta && (
+      <div className={styles.body}>
+        <span className={styles.value}>{value}</span>
+        <span className={styles.label}>{label}</span>
+        {trend && (
           <span
-            className={`text-xs font-medium ${
-              deltaPositive ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'
+            className={`${styles.trend} ${
+              trend.direction === 'up' ? styles.trendUp : styles.trendDown
             }`}
           >
-            {delta}
+            {trend.direction === 'up' ? '↑' : '↓'}&nbsp;{trend.value}
           </span>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

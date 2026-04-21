@@ -1,64 +1,105 @@
 /**
  * components/dashboard/ActiveProjectCard.tsx
  *
- * Shows the most recent in-progress build with its material checklist
- * completion percentage and a "Continue" link. Shown prominently on
- * the Dashboard as the primary call-to-action.
+ * Hero card for the Dashboard's "Active Project" section. Shows a block-grid
+ * thumbnail derived from the build's color palette, progress bar, current step,
+ * and a Continue button.
  */
 
-import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { BuildProgressBar } from '@/components/instructions/BuildProgressBar'
-import { computeChecklistProgress } from '@/hooks/useMaterialChecklist'
-import type { MinecraftBuild } from '@/types/build'
+import type { MinecraftBuild, BuildProject, Difficulty } from '@/types/build'
+import styles from './ActiveProjectCard.module.css'
 
-interface ActiveProjectCardProps {
-  build: MinecraftBuild
+const FALLBACK_PALETTE = ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
+
+const DIFF_CLASS: Record<Difficulty, string> = {
+  easy: 'diff-easy',
+  medium: 'diff-medium',
+  hard: 'diff-hard',
+  expert: 'diff-expert',
 }
 
-export function ActiveProjectCard({ build }: ActiveProjectCardProps) {
-  const materialProgress = computeChecklistProgress(build)
+const STATUS_LABEL: Record<BuildProject['status'], string> = {
+  todo: 'To Do',
+  'in-progress': 'In Progress',
+  done: 'Done',
+}
+
+/** Props for ActiveProjectCard. */
+export interface ActiveProjectCardProps {
+  /** Project tracker holding status, progress, and current step. */
+  project: BuildProject
+  /** The build definition supplying title, difficulty, and block palette. */
+  build: MinecraftBuild
+  /** Called when the user clicks the Continue button. */
+  onContinue: () => void
+}
+
+export function ActiveProjectCard({ project, build, onContinue }: ActiveProjectCardProps) {
+  const palette = build.blockPalette?.length ? build.blockPalette : FALLBACK_PALETTE
+  const { current, total } = project.progress
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0
 
   return (
-    <Card className="p-5 flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">Active Build</span>
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">{build.title}</h3>
-        </div>
-        <div className="flex gap-1.5">
-          <Badge variant="default">{build.category}</Badge>
-          {build.isAiGenerated && <Badge variant="accent">AI</Badge>}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-[var(--text-muted)]">Build steps</span>
-        </div>
-        <BuildProgressBar build={build} />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-[var(--text-muted)]">
-          Materials gathered — {materialProgress}%
-        </span>
-        <div className="h-1.5 rounded-full bg-[var(--border)]">
+    <div className={styles.card}>
+      {/* Block-grid thumbnail */}
+      <div className={styles.thumbnail} aria-hidden="true">
+        {Array.from({ length: 40 }, (_, i) => (
           <div
-            className="h-full rounded-full bg-[var(--success)] transition-all duration-300"
-            style={{ width: `${materialProgress}%` }}
+            key={i}
+            className={styles.block}
+            style={{ background: palette[i % palette.length] }}
           />
-        </div>
+        ))}
       </div>
 
-      <Link
-        to={`/builds/${build.id}`}
-        className="flex items-center justify-end gap-1 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors mt-auto"
-      >
-        Continue <ArrowRight size={14} />
-      </Link>
-    </Card>
+      <div className={styles.content}>
+        {/* Header */}
+        <div className={styles.headerRow}>
+          <div className={styles.titleGroup}>
+            <span className={styles.kicker}>Active Project</span>
+            <h3 className={styles.name}>{project.name || build.title}</h3>
+          </div>
+          <div className={styles.badges}>
+            <span
+              className={`badge ${
+                project.status === 'in-progress' ? 'badge-progress' : 'badge-todo'
+              }`}
+            >
+              {STATUS_LABEL[project.status]}
+            </span>
+            <span className={`badge ${DIFF_CLASS[build.difficulty]}`}>
+              {build.difficulty}
+            </span>
+          </div>
+        </div>
+
+        {/* Current step */}
+        {project.currentStepText && (
+          <p className={styles.stepText}>
+            <span className={styles.stepPrefix}>Next —</span>{' '}
+            {project.currentStepText}
+          </p>
+        )}
+
+        {/* Progress */}
+        <div className={styles.progressSection}>
+          <div className={styles.progressMeta}>
+            <span className={styles.progressLabel}>Build progress</span>
+            <span className={styles.progressPct}>{pct}%</span>
+          </div>
+          <div className="chunky-progress">
+            <div className="chunky-progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <span className={styles.stepCount}>
+            {current} / {total} steps
+          </span>
+        </div>
+
+        {/* CTA */}
+        <button className="btn btn-primary btn-sm" onClick={onContinue}>
+          Continue Building →
+        </button>
+      </div>
+    </div>
   )
 }
