@@ -63,7 +63,6 @@ export function SavedBuilds() {
   const [tab, setTab]       = useState<FilterTab>('all')
   const [sortBy, setSortBy] = useState<SortKey>('newest')
   const [query, setQuery]   = useState('')
-  const [savedFlags, setSavedFlags] = useState<Record<string, boolean>>({})
 
   const counts = useMemo(() => {
     let saved = 0
@@ -142,9 +141,6 @@ export function SavedBuilds() {
     } catch {
       /* error surfaced via hook state */
     }
-  }
-  function handleSave(buildId: string) {
-    setSavedFlags((prev) => ({ ...prev, [buildId]: !prev[buildId] }))
   }
 
   /* ───────── render ───────── */
@@ -246,13 +242,12 @@ export function SavedBuilds() {
               const cardProject = project ? toCardProject(project, build) : undefined
               return (
                 <BuildCard
-                  key={build.id + (savedFlags[build.id] ? '-saved' : '')}
+                  key={build.id}
                   build={build}
                   project={cardProject}
                   onContinue={() => handleContinue(build.id)}
                   onView={() => handleView(build.id)}
                   onDelete={() => void handleDelete(build.id)}
-                  onSave={project ? undefined : () => handleSave(build.id)}
                 />
               )
             })}

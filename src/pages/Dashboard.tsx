@@ -28,6 +28,7 @@ import { SectionCard } from '@/components/layout/SectionCard'
 import { DashboardSkeleton, EmptyState } from '@/components/ui/LoadingStates'
 import { useTheme } from '@/hooks/useTheme'
 import { useBuilds } from '@/hooks/useBuilds'
+import { useProjects } from '@/hooks/useProjects'
 import { useWorldNotes } from '@/hooks/useWorldNotes'
 
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -41,12 +42,17 @@ import type { ActivityItem } from '@/components/dashboard/ActivityFeed'
 import type { MinecraftBuild } from '@/types/build'
 import type { BuildProject } from '@/types/project'
 
+function totalStepCount(b: MinecraftBuild): number {
+  return b.phases.reduce((n, p) => n + p.steps.length, 0)
+}
+
 
 export function Dashboard() {
   const navigate = useNavigate()
   const { theme } = useTheme()
 
   const { builds, loading: buildsLoading } = useBuilds()
+  const { projects } = useProjects()
   const { notes } = useWorldNotes()
 
   /** Newest five builds (drives the Recent Builds grid & Activity feed). */
@@ -59,27 +65,33 @@ export function Dashboard() {
   }, [builds])
 
   /**
-   * Placeholder for the active project. A future iteration will pair
-   * this with a `useProjects()` list hook — for now we surface the most
-   * recent build as a proxy so the hero card has something to render.
+   * Prefer the user's most-recently-updated in-progress project. Falls back
+   * to the newest build with no project row so the hero card still has
+   * something to show for brand-new accounts.
    */
-  const activeBuild: MinecraftBuild | undefined = recentBuilds[0]
-  const activeProject: BuildProject | null = useMemo(() => {
-    if (!activeBuild) return null
-    const stamp = activeBuild.generatedAt
-    return {
-      id: `draft-${activeBuild.id}`,
-      userId: '',
-      buildId: activeBuild.id,
-      name: activeBuild.name,
-      status: 'in-progress',
-      completedSteps: [],
-      collectedBlocks: [],
-      progress: { current: 0, total: 1 },
-      createdAt: stamp,
-      updatedAt: stamp,
+  const { activeBuild, activeProject } = useMemo<{
+    activeBuild: MinecraftBuild | undefined
+    activeProject: BuildProject | null
+  }>(() => {
+    const inProgress = projects
+      .filter((p) => p.status === 'in-progress' || p.status === 'todo')
+      .sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      )
+    for (const p of inProgress) {
+      const build = builds.find((b) => b.id === p.buildId)
+      if (build) {
+        const total = Math.max(totalStepCount(build), 1)
+        const current = Math.min(p.completedSteps.length, total)
+        return {
+          activeBuild: build,
+          activeProject: { ...p, progress: { current, total } },
+        }
+      }
     }
-  }, [activeBuild])
+    const fallback = recentBuilds[0]
+    return { activeBuild: fallback, activeProject: null }
+  }, [projects, builds, recentBuilds])
 
   const activities: ActivityItem[] = useMemo(() => {
     return builds
@@ -94,12 +106,13 @@ export function Dashboard() {
 
   const completedCount = useMemo(
     () =>
-      builds.filter(
-        (b) =>
-          (b as unknown as { status?: string }).status === 'done' ||
-          (b as unknown as { status?: string }).status === 'completed',
-      ).length,
-    [builds],
+      projects.filter((p) => p.status === 'done' || p.status === 'completed')
+        .length,
+    [projects],
+  )
+  const activeCount = useMemo(
+    () => projects.filter((p) => p.status === 'in-progress').length,
+    [projects],
   )
 
   if (buildsLoading && builds.length === 0) {
@@ -119,7 +132,7 @@ export function Dashboard() {
       subtitle={`${theme === 'blossom' ? '🌸 ' : '⚡ '}${
         buildsLoading
           ? 'Loading your workshop…'
-          : `You and Pibble have ${Math.max(builds.length - completedCount, 0)} active builds. Let's keep crafting.`
+          : `You and Pibble have ${activeCount} active builds. Let's keep crafting.`
       }`}
       headerActions={
         <QuickActionsBar
@@ -139,7 +152,7 @@ export function Dashboard() {
       >
         <StatCard
           icon={Hammer}
-          value={Math.max(builds.length - completedCount, 0)}
+          value={activeCount}
           label="Active Builds"
         />
         <StatCard

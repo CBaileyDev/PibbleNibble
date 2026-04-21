@@ -7,7 +7,7 @@
  * DB columns are snake_case; the hook converts at the boundary.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { WorldNote } from '@/types/project'
 
@@ -35,8 +35,6 @@ export function useWorldNotes() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
 
-  const fetchRef = useRef<() => Promise<void>>()
-
   const fetchNotes = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -52,8 +50,6 @@ export function useWorldNotes() {
     }
     setLoading(false)
   }, [])
-
-  fetchRef.current = fetchNotes
 
   const addNote = useCallback(
     async (note: Omit<WorldNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> => {
@@ -106,7 +102,7 @@ export function useWorldNotes() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'world_notes' },
         () => {
-          void fetchRef.current?.()
+          void fetchNotes()
         },
       )
       .subscribe()

@@ -34,7 +34,7 @@ import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { useBuilds } from '@/hooks/useBuilds'
-import type { MinecraftBuild } from '@/types/build'
+import { useProjects } from '@/hooks/useProjects'
 
 /* ── Local types ────────────────────────────────────────────────────────── */
 
@@ -48,7 +48,6 @@ interface CompletedBuild {
   difficulty: Difficulty
   theme: string
   completedAt: string
-  sessionCount: number
 }
 
 interface Achievement {
@@ -72,63 +71,6 @@ interface PlayerStats {
    dedicated Supabase table yet. Overall stats and the build history
    timeline are now derived from live data (see inside the component).
    ───────────────────────────────────────────────────────────────────── */
-
-const FALLBACK_COMPLETED_BUILDS: CompletedBuild[] = [
-  {
-    id: 'build-cherrywood-bridge',
-    name: 'Cherrywood Rope Bridge',
-    accentColor: '#D8526E',
-    difficulty: 'easy',
-    theme: 'coastal',
-    completedAt: '2026-04-18T19:45:00Z',
-    sessionCount: 2,
-  },
-  {
-    id: 'build-sunken-lighthouse',
-    name: 'Sunken Coral Lighthouse',
-    accentColor: '#6FA5A0',
-    difficulty: 'hard',
-    theme: 'coastal',
-    completedAt: '2026-04-14T16:20:00Z',
-    sessionCount: 5,
-  },
-  {
-    id: 'build-amber-cottage',
-    name: 'Amber Cottage',
-    accentColor: '#E8A23A',
-    difficulty: 'medium',
-    theme: 'cozy',
-    completedAt: '2026-04-09T21:00:00Z',
-    sessionCount: 3,
-  },
-  {
-    id: 'build-obsidian-spire',
-    name: 'Obsidian Spire',
-    accentColor: '#3C2F30',
-    difficulty: 'expert',
-    theme: 'magical',
-    completedAt: '2026-04-02T14:10:00Z',
-    sessionCount: 8,
-  },
-  {
-    id: 'build-willow-greenhouse',
-    name: 'Willow Greenhouse',
-    accentColor: '#8AA64A',
-    difficulty: 'easy',
-    theme: 'forest',
-    completedAt: '2026-03-28T11:00:00Z',
-    sessionCount: 2,
-  },
-  {
-    id: 'build-mesa-outpost',
-    name: 'Mesa Frontier Outpost',
-    accentColor: '#C47B5C',
-    difficulty: 'medium',
-    theme: 'desert',
-    completedAt: '2026-03-21T18:30:00Z',
-    sessionCount: 4,
-  },
-]
 
 const ACHIEVEMENTS: Achievement[] = [
   {
@@ -338,9 +280,6 @@ function BuildTimeline({ builds }: TimelineProps) {
                 color: 'var(--text-secondary)',
               }}
             >
-              Completed in {build.sessionCount}{' '}
-              {build.sessionCount === 1 ? 'session' : 'sessions'}
-              {' · '}
               <span style={{ color: 'var(--text-muted)' }}>{build.theme}</span>
             </p>
           </div>
@@ -679,50 +618,36 @@ function FavoriteTypes({ players }: { players: PlayerStats[] }) {
 
 export function Progress() {
   const { builds } = useBuilds()
+  const { projects } = useProjects()
 
-  /** Build rows from Supabase may carry either the strict schema (`name`)
-   *  or the ambient shape (`title`). Tolerate both. */
   const completedBuilds: CompletedBuild[] = useMemo(() => {
-    const mapped = builds
-      .filter((b: MinecraftBuild) => {
-        const r = b as unknown as Record<string, unknown>
-        return r.status === 'done' || r.status === 'completed'
-      })
-      .map<CompletedBuild>((b: MinecraftBuild) => {
-        const r = b as unknown as Record<string, unknown>
-        const palette =
-          Array.isArray(r.blockPalette) && (r.blockPalette as string[])[0]
-            ? (r.blockPalette as string[])[0]
-            : '#6d83f2'
+    const buildsById = new Map(builds.map((b) => [b.id, b]))
+    return projects
+      .filter((p) => p.status === 'done' || p.status === 'completed')
+      .map<CompletedBuild | null>((p) => {
+        const b = buildsById.get(p.buildId)
+        if (!b) return null
         return {
           id: b.id,
-          name: (r.name as string) ?? (r.title as string) ?? 'Untitled',
-          accentColor: palette,
-          difficulty: (b.difficulty ?? 'medium') as Difficulty,
-          theme: (b.theme as string) ?? 'cozy',
-          completedAt:
-            (r.completedAt as string) ??
-            (r.updatedAt as string) ??
-            (r.updated_at as string) ??
-            new Date().toISOString(),
-          sessionCount: Number(r.sessionCount ?? 1),
+          name: b.name,
+          accentColor: b.blockPalette?.colorHexes?.[0] ?? '#6d83f2',
+          difficulty: b.difficulty as Difficulty,
+          theme: b.theme,
+          completedAt: p.updatedAt,
         }
       })
-
-    return mapped.length > 0 ? mapped : FALLBACK_COMPLETED_BUILDS
-  }, [builds])
+      .filter((x): x is CompletedBuild => x !== null)
+  }, [builds, projects])
 
   const totalBuildsGenerated = builds.length
-  const buildsCompleted = builds.filter((b: MinecraftBuild) => {
-    const r = b as unknown as Record<string, unknown>
-    return r.status === 'done' || r.status === 'completed'
-  }).length
-  const totalStepsCompleted = builds.reduce((sum: number, b: MinecraftBuild) => {
-    const r = b as unknown as Record<string, unknown>
-    const done = (r.completedSteps as string[] | undefined) ?? []
-    return sum + done.length
-  }, 0)
-  const totalPlaySessions = Math.max(buildsCompleted, 1)
+  const buildsCompleted = projects.filter(
+    (p) => p.status === 'done' || p.status === 'completed',
+  ).length
+  const totalStepsCompleted = projects.reduce(
+    (sum, p) => sum + p.completedSteps.length,
+    0,
+  )
+  const activeProjects = projects.filter((p) => p.status === 'in-progress').length
 
   return (
     <PageLayout
@@ -754,8 +679,8 @@ export function Progress() {
         />
         <StatCard
           icon={Gamepad2}
-          value={formatNumber(totalPlaySessions)}
-          label="Total Play Sessions"
+          value={formatNumber(activeProjects)}
+          label="Active Projects"
         />
       </div>
 

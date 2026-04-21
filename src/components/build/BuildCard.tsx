@@ -40,33 +40,9 @@ export interface BuildCardProps {
   onSave?: () => void
 }
 
-/* ───────────────────────── helpers ───────────────────────── */
+/* ───────────────────────── constants ───────────────────────── */
 
-/** Loose accessor — supports both the formal schema (`name`) and the ambient
- *  shape used across the app (`title`). */
-function buildName(b: MinecraftBuild): string {
-  const rec = b as unknown as Record<string, unknown>
-  return (rec.name as string) ?? (rec.title as string) ?? 'Untitled Build'
-}
-
-/** Extracts an array of hex colours from whichever palette shape the build uses. */
-function buildPalette(b: MinecraftBuild): string[] {
-  const rec = b as unknown as Record<string, unknown>
-  const p = rec.blockPalette
-  if (Array.isArray(p)) return p as string[]
-  if (p && typeof p === 'object') {
-    const obj = p as { colorHexes?: string[] }
-    if (Array.isArray(obj.colorHexes)) return obj.colorHexes
-  }
-  return ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
-}
-
-/** Read `progressionLevel` defensively — not every seed includes it. */
-function buildProgression(b: MinecraftBuild): string | undefined {
-  const rec = b as unknown as Record<string, unknown>
-  const v = rec.progressionLevel
-  return typeof v === 'string' ? v : undefined
-}
+const FALLBACK_PALETTE = ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
 
 const PROGRESSION_LABEL: Record<string, string> = {
   early:   'Early Game',
@@ -107,10 +83,12 @@ export function BuildCard({
   onDelete,
   onSave,
 }: BuildCardProps) {
-  const name = buildName(build)
-  const palette = buildPalette(build)
-  const progression = buildProgression(build)
-  const difficulty = (build.difficulty ?? 'medium') as string
+  const name = build.name
+  const palette = build.blockPalette?.colorHexes?.length
+    ? build.blockPalette.colorHexes
+    : FALLBACK_PALETTE
+  const progression = build.progressionLevel
+  const difficulty = build.difficulty
 
   const isInProgress = project?.status === 'in-progress'
   const isCompleted  = project?.status === 'done' || project?.status === 'completed'

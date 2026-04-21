@@ -81,7 +81,9 @@ export function useAuth() {
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    navigate('/')
+    // Intentionally no navigate here — LoginPage reacts to `user` becoming
+    // non-null, which happens after AuthGate's `syncProfile` populates the
+    // store. Navigating here races with that write.
   }
 
   async function signOut() {
