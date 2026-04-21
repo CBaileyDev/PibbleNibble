@@ -13,6 +13,7 @@ import styles from './ActiveProjectCard.module.css'
 const FALLBACK_PALETTE = ['#2E3A4E', '#1B2330', '#00CCFF', '#5A6A80', '#131A26']
 
 const DIFF_CLASS: Record<Difficulty, string> = {
+  beginner: 'diff-beginner',
   easy: 'diff-easy',
   medium: 'diff-medium',
   hard: 'diff-hard',
@@ -26,6 +27,12 @@ const STATUS_LABEL: Record<BuildProject['status'], string> = {
   completed: 'Completed',
 }
 
+/** Extract a list of hex colors from the canonical BlockPalette. */
+function paletteColors(build: MinecraftBuild): string[] {
+  const hexes = build.blockPalette?.colorHexes
+  return hexes && hexes.length > 0 ? hexes : FALLBACK_PALETTE
+}
+
 /** Props for ActiveProjectCard. */
 export interface ActiveProjectCardProps {
   /** Project tracker holding status, progress, and current step. */
@@ -37,8 +44,9 @@ export interface ActiveProjectCardProps {
 }
 
 export function ActiveProjectCard({ project, build, onContinue }: ActiveProjectCardProps) {
-  const palette = build.blockPalette?.length ? build.blockPalette : FALLBACK_PALETTE
-  const { current, total } = project.progress
+  const palette = paletteColors(build)
+  const progress = project.progress ?? { current: 0, total: 1 }
+  const { current, total } = progress
   const pct = total > 0 ? Math.round((current / total) * 100) : 0
 
   return (
@@ -59,7 +67,7 @@ export function ActiveProjectCard({ project, build, onContinue }: ActiveProjectC
         <div className={styles.headerRow}>
           <div className={styles.titleGroup}>
             <span className={styles.kicker}>Active Project</span>
-            <h3 className={styles.name}>{project.name || build.title}</h3>
+            <h3 className={styles.name}>{project.name || build.name}</h3>
           </div>
           <div className={styles.badges}>
             <span

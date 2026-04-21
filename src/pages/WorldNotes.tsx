@@ -110,7 +110,7 @@ export function WorldNotes() {
                 <button
                   onClick={() => void deleteNote(note.id)}
                   className="p-1.5 text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors rounded"
-                  aria-label="Delete note"
+                  aria-label={`Delete note "${note.label}"`}
                 >
                   <Trash2 size={14} />
                 </button>

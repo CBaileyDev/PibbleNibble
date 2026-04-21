@@ -33,6 +33,6 @@ export const useUIStore = create<UIState>()((set) => ({
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  openModal: (id, entityId = null) => set({ activeModal: id, modalEntityId: entityId }),
+  openModal: (id, entityId) => set({ activeModal: id, modalEntityId: entityId ?? null }),
   closeModal: () => set({ activeModal: null, modalEntityId: null }),
 }))

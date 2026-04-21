@@ -175,6 +175,7 @@ function PageHeader({
           <span style={{ color: 'var(--accent)' }}>Results</span>
           {count > 0 && (
             <span
+              aria-live="polite"
               style={{
                 marginLeft: 12,
                 display: 'inline-flex',
@@ -188,6 +189,7 @@ function PageHeader({
               }}
             >
               <span
+                aria-hidden="true"
                 style={{
                   width: 6,
                   height: 6,

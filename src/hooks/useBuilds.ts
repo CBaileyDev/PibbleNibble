@@ -5,48 +5,109 @@
  * mount, subscribes to realtime changes on the `builds` table, and
  * exposes imperative save / delete helpers.
  *
- * Row layout: the `builds` table stores each build as a flattened row
- * with snake_case columns (user_id, created_at, updated_at, ...) plus
- * the structured payload. Timestamps and FK columns are converted at
- * the boundary so the rest of the app can stay in camelCase.
+ * Row layout: the `builds` table uses an explicit column list (see
+ * supabase/migrations/0001_initial_schema.sql). We convert snake_case
+ * columns to the canonical camelCase `MinecraftBuild` shape in a single
+ * whitelist — both directions. No spread, no stray keys, no casts.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { MinecraftBuild } from '@/types/build'
+import { useUserStore } from '@/stores/userStore'
+import type {
+  Biome,
+  BlockPalette,
+  Difficulty,
+  Dimensions,
+  MaterialItem,
+  MinecraftBuild,
+  Phase,
+  ProgressionLevel,
+  Purpose,
+  Theme,
+  ValidationReport,
+  VisualPreview,
+} from '@/types/build'
 
-/** Anything non-data coming back from a Supabase failure. */
 type Err = Error | null
 
-/** Row → MinecraftBuild. Mostly identity, with snake_case → camelCase fix-ups. */
-function rowToBuild(row: Record<string, unknown>): MinecraftBuild {
-  const normalized = {
-    ...row,
-    userId: row.user_id ?? (row as { userId?: unknown }).userId,
-    createdAt: row.created_at ?? (row as { createdAt?: unknown }).createdAt,
-    updatedAt: row.updated_at ?? (row as { updatedAt?: unknown }).updatedAt,
-    isFavorite: row.is_favorite ?? (row as { isFavorite?: unknown }).isFavorite,
-    isAiGenerated:
-      row.is_ai_generated ?? (row as { isAiGenerated?: unknown }).isAiGenerated,
-  }
-  return normalized as unknown as MinecraftBuild
+// ─── Row shape (mirror of the builds table) ───────────────────────────────────
+
+interface BuildRow {
+  id: string
+  user_id: string
+  name: string
+  description: string
+  generated_at: string
+  theme: Theme
+  purpose: Purpose
+  biome: Biome
+  style_tags: string[]
+  difficulty: Difficulty
+  progression_level: ProgressionLevel
+  estimated_minutes: number
+  required_skills: string[]
+  dimensions: Dimensions
+  materials: MaterialItem[]
+  block_palette: BlockPalette
+  phases: Phase[]
+  visual_preview: VisualPreview
+  validation: ValidationReport | null
+  created_at: string
+  updated_at: string
 }
 
-/** MinecraftBuild → row. The reverse of `rowToBuild`. */
-function buildToRow(build: MinecraftBuild): Record<string, unknown> {
-  const b = build as unknown as Record<string, unknown>
-  const row: Record<string, unknown> = { ...b }
-  if ('userId' in b) row.user_id = b.userId
-  if ('createdAt' in b) row.created_at = b.createdAt
-  if ('updatedAt' in b) row.updated_at = b.updatedAt
-  if ('isFavorite' in b) row.is_favorite = b.isFavorite
-  if ('isAiGenerated' in b) row.is_ai_generated = b.isAiGenerated
-  delete row.userId
-  delete row.createdAt
-  delete row.updatedAt
-  delete row.isFavorite
-  delete row.isAiGenerated
-  return row
+function rowToBuild(row: BuildRow): MinecraftBuild {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    generatedAt: row.generated_at,
+    theme: row.theme,
+    purpose: row.purpose,
+    biome: row.biome,
+    styleTags: row.style_tags ?? [],
+    difficulty: row.difficulty,
+    progressionLevel: row.progression_level,
+    estimatedMinutes: row.estimated_minutes,
+    requiredSkills: row.required_skills ?? [],
+    dimensions: row.dimensions,
+    materials: row.materials ?? [],
+    blockPalette: row.block_palette,
+    phases: row.phases ?? [],
+    visualPreview: row.visual_preview,
+    validation: row.validation ?? null,
+  }
+}
+
+/**
+ * Build an upsert payload from a MinecraftBuild and the authenticated
+ * user's id. Explicit whitelist — anything the AI or client adds that
+ * isn't on this list is dropped before the row reaches Postgres.
+ */
+function buildToRow(build: MinecraftBuild, userId: string): Omit<BuildRow, 'created_at'> {
+  return {
+    id: build.id,
+    user_id: userId,
+    name: build.name,
+    description: build.description,
+    generated_at: build.generatedAt,
+    theme: build.theme,
+    purpose: build.purpose,
+    biome: build.biome,
+    style_tags: build.styleTags,
+    difficulty: build.difficulty,
+    progression_level: build.progressionLevel,
+    estimated_minutes: build.estimatedMinutes,
+    required_skills: build.requiredSkills,
+    dimensions: build.dimensions,
+    materials: build.materials,
+    block_palette: build.blockPalette,
+    phases: build.phases,
+    visual_preview: build.visualPreview,
+    validation: build.validation,
+    updated_at: new Date().toISOString(),
+  }
 }
 
 /**
@@ -57,11 +118,13 @@ function buildToRow(build: MinecraftBuild): Record<string, unknown> {
  * INSERT / UPDATE / DELETE triggers a refetch.
  */
 export function useBuilds() {
+  const userId = useUserStore((s) => s.user?.id)
+
   const [builds, setBuilds] = useState<MinecraftBuild[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
 
-  /** We use a ref so the subscription callback always calls the latest fetcher. */
+  /** Latest fetcher, so the realtime callback never calls a stale closure. */
   const fetchRef = useRef<() => Promise<MinecraftBuild[]>>()
 
   const fetchSavedBuilds = useCallback(async (): Promise<MinecraftBuild[]> => {
@@ -78,7 +141,7 @@ export function useBuilds() {
       throw err
     }
 
-    const next = (data ?? []).map((r) => rowToBuild(r as Record<string, unknown>))
+    const next = (data ?? []).map((r) => rowToBuild(r as BuildRow))
     setBuilds(next)
     setLoading(false)
     return next
@@ -86,26 +149,29 @@ export function useBuilds() {
 
   fetchRef.current = fetchSavedBuilds
 
-  const saveBuild = useCallback(async (build: MinecraftBuild): Promise<void> => {
-    const row = buildToRow(build)
-    row.updated_at = new Date().toISOString()
-    const { error: err } = await supabase
-      .from('builds')
-      .upsert(row, { onConflict: 'id' })
+  const saveBuild = useCallback(
+    async (build: MinecraftBuild): Promise<void> => {
+      if (!userId) throw new Error('Cannot save build: not authenticated')
+      const row = buildToRow(build, userId)
+      const { error: err } = await supabase
+        .from('builds')
+        .upsert(row, { onConflict: 'id' })
 
-    if (err) {
-      setError(err)
-      throw err
-    }
-    // Optimistic local merge — realtime will follow up.
-    setBuilds((prev) => {
-      const idx = prev.findIndex((b) => b.id === build.id)
-      if (idx === -1) return [build, ...prev]
-      const next = [...prev]
-      next[idx] = build
-      return next
-    })
-  }, [])
+      if (err) {
+        setError(err)
+        throw err
+      }
+      // Optimistic local merge — realtime will follow up.
+      setBuilds((prev) => {
+        const idx = prev.findIndex((b) => b.id === build.id)
+        if (idx === -1) return [build, ...prev]
+        const next = [...prev]
+        next[idx] = build
+        return next
+      })
+    },
+    [userId],
+  )
 
   const deleteBuild = useCallback(async (id: string): Promise<void> => {
     const { error: err } = await supabase.from('builds').delete().eq('id', id)
@@ -149,8 +215,7 @@ export function useBuilds() {
 
 /**
  * Single-build fetcher — used by BuildDetail and anywhere else that
- * needs one record by id. Not part of the core spec but shares the
- * `builds` table boundary logic with `useBuilds`.
+ * needs one record by id. Shares the boundary logic with `useBuilds`.
  */
 export function useBuild(id: string | undefined) {
   const [build, setBuild] = useState<MinecraftBuild | null>(null)
@@ -175,7 +240,7 @@ export function useBuild(id: string | undefined) {
       setError(err)
       setBuild(null)
     } else {
-      setBuild(data ? rowToBuild(data as Record<string, unknown>) : null)
+      setBuild(data ? rowToBuild(data as BuildRow) : null)
     }
     setLoading(false)
   }, [id])

@@ -6,23 +6,29 @@
  * derived from difficulty. Two action buttons: Start and Save.
  */
 
-import type { MinecraftBuild, Difficulty } from '@/types/build'
+import type { MinecraftBuild, Difficulty, ProgressionLevel } from '@/types/build'
 import styles from './RecentBuildCard.module.css'
 
 const FALLBACK_PALETTE = ['#2E3A4E', '#3C4E62', '#5A6A80', '#1B2330', '#0A0D12']
 
 const DIFF_CLASS: Record<Difficulty, string> = {
+  beginner: 'diff-beginner',
   easy: 'diff-easy',
   medium: 'diff-medium',
   hard: 'diff-hard',
   expert: 'diff-expert',
 }
 
-const PROGRESSION: Record<Difficulty, string> = {
-  easy: 'Early Game',
-  medium: 'Mid Game',
-  hard: 'Late Game',
-  expert: 'End Game',
+const PROGRESSION_LABEL: Record<ProgressionLevel, string> = {
+  early:   'Early Game',
+  mid:     'Mid Game',
+  late:    'Late Game',
+  endgame: 'End Game',
+}
+
+function paletteColors(build: MinecraftBuild): string[] {
+  const hexes = build.blockPalette?.colorHexes
+  return hexes && hexes.length > 0 ? hexes : FALLBACK_PALETTE
 }
 
 /** Props for RecentBuildCard. */
@@ -36,7 +42,7 @@ export interface RecentBuildCardProps {
 }
 
 export function RecentBuildCard({ build, onStart, onSave }: RecentBuildCardProps) {
-  const palette = build.blockPalette?.length ? build.blockPalette : FALLBACK_PALETTE
+  const palette = paletteColors(build)
 
   return (
     <div className={styles.card}>
@@ -54,13 +60,13 @@ export function RecentBuildCard({ build, onStart, onSave }: RecentBuildCardProps
       {/* Body */}
       <div className={styles.body}>
         <div className={styles.meta}>
-          <h4 className={styles.name}>{build.title}</h4>
+          <h4 className={styles.name}>{build.name}</h4>
           <div className={styles.tags}>
             <span className={`badge ${DIFF_CLASS[build.difficulty]}`}>
               {build.difficulty}
             </span>
             <span className="badge badge-neutral">
-              {PROGRESSION[build.difficulty]}
+              {PROGRESSION_LABEL[build.progressionLevel]}
             </span>
           </div>
         </div>
