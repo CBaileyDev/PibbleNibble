@@ -178,7 +178,7 @@ export function useProject(buildId: string) {
           event: '*',
           schema: 'public',
           table: 'projects',
-          filter: `build_id=eq.${buildId}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
           void fetchProject()

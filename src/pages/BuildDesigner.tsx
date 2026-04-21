@@ -7,7 +7,7 @@
  * variations. The overlay stays visible until the promise settles.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
@@ -25,17 +25,32 @@ export function BuildDesigner() {
   const navigate = useNavigate()
   const [generating, setGenerating] = useState(false)
   const phase = usePhaseCycler(generating, OVERLAY_PHASE_MS)
+  const abortRef = useRef<AbortController | null>(null)
+
+  // Abort any in-flight request when the page unmounts.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   async function handleSubmit(data: BuildDesignerInput) {
     if (generating) return
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setGenerating(true)
     try {
-      const { builds } = await generateBuilds(data)
-      navigate('/build-results', { state: { builds, input: data } })
+      const { builds, warnings } = await generateBuilds(data, {
+        signal: controller.signal,
+      })
+      navigate('/build-results', { state: { builds, input: data, warnings } })
     } catch (err) {
+      if (controller.signal.aborted) return
       const message = err instanceof Error ? err.message : 'Generation failed.'
       toast.error(message)
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       setGenerating(false)
     }
   }

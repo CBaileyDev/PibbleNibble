@@ -11,7 +11,7 @@
  * whitelist — both directions. No spread, no stray keys, no casts.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUserStore } from '@/stores/userStore'
 import type {
@@ -124,15 +124,18 @@ export function useBuilds() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
 
-  /** Latest fetcher, so the realtime callback never calls a stale closure. */
-  const fetchRef = useRef<() => Promise<MinecraftBuild[]>>()
-
   const fetchSavedBuilds = useCallback(async (): Promise<MinecraftBuild[]> => {
+    if (!userId) {
+      setBuilds([])
+      setLoading(false)
+      return []
+    }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
       .from('builds')
       .select('*')
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false })
 
     if (err) {
@@ -145,9 +148,7 @@ export function useBuilds() {
     setBuilds(next)
     setLoading(false)
     return next
-  }, [])
-
-  fetchRef.current = fetchSavedBuilds
+  }, [userId])
 
   const saveBuild = useCallback(
     async (build: MinecraftBuild): Promise<void> => {
@@ -187,13 +188,19 @@ export function useBuilds() {
       /* state already set */
     })
 
+    if (!userId) return
     const channel = supabase
-      .channel('builds_realtime')
+      .channel(`builds_${userId}_realtime`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'builds' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'builds',
+          filter: `user_id=eq.${userId}`,
+        },
         () => {
-          void fetchRef.current?.().catch(() => undefined)
+          void fetchSavedBuilds().catch(() => undefined)
         },
       )
       .subscribe()
@@ -201,7 +208,7 @@ export function useBuilds() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [fetchSavedBuilds])
+  }, [userId, fetchSavedBuilds])
 
   return {
     builds,
@@ -218,12 +225,14 @@ export function useBuilds() {
  * needs one record by id. Shares the boundary logic with `useBuilds`.
  */
 export function useBuild(id: string | undefined) {
+  const userId = useUserStore((s) => s.user?.id)
+
   const [build, setBuild] = useState<MinecraftBuild | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Err>(null)
 
   const refetch = useCallback(async () => {
-    if (!id) {
+    if (!id || !userId) {
       setBuild(null)
       setLoading(false)
       return
@@ -234,6 +243,7 @@ export function useBuild(id: string | undefined) {
       .from('builds')
       .select('*')
       .eq('id', id)
+      .eq('user_id', userId)
       .maybeSingle()
 
     if (err) {
@@ -243,7 +253,7 @@ export function useBuild(id: string | undefined) {
       setBuild(data ? rowToBuild(data as BuildRow) : null)
     }
     setLoading(false)
-  }, [id])
+  }, [id, userId])
 
   useEffect(() => {
     void refetch()

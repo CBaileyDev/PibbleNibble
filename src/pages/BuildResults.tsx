@@ -11,7 +11,7 @@
  *                      lands in Phase 7 via useSaveBuild().
  */
 
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BuildResultCard } from '@/components/build/BuildResultCard'
 import { EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
@@ -21,6 +21,7 @@ import type { MinecraftBuild } from '@/types/build'
 
 interface BuildResultsLocationState {
   builds?: MinecraftBuild[]
+  warnings?: string[]
 }
 
 export function BuildResults() {
@@ -29,8 +30,22 @@ export function BuildResults() {
   const { saveBuild } = useBuilds()
   const state = (location.state ?? {}) as BuildResultsLocationState
   const builds = state.builds ?? []
+  const warnings = state.warnings ?? []
 
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set())
+
+  // Surface non-blocking auto-correction notes once per navigation.
+  const announcedRef = useRef(false)
+  useEffect(() => {
+    if (announcedRef.current) return
+    if (warnings.length === 0) return
+    announcedRef.current = true
+    const summary =
+      warnings.length === 1
+        ? warnings[0]
+        : `${warnings.length} adjustments made by the validator.`
+    toast.info(summary)
+  }, [warnings])
 
   async function persist(build: MinecraftBuild) {
     try {

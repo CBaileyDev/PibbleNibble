@@ -15,6 +15,7 @@
 import { Outlet } from 'react-router-dom'
 import { useAuthSubscription } from '@/features/auth/useAuth'
 import { useUserStore } from '@/stores/userStore'
+import { AppToaster } from '@/components/ui/Toast'
 
 export function AuthGate() {
   useAuthSubscription()
@@ -22,26 +23,34 @@ export function AuthGate() {
 
   if (!authReady) {
     return (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          minHeight: '100dvh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--bg-primary)',
-          color: 'var(--text-muted)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}
-      >
-        Loading…
-      </div>
+      <>
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            minHeight: '100dvh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          Loading…
+        </div>
+        <AppToaster />
+      </>
     )
   }
 
-  return <Outlet />
+  return (
+    <>
+      <Outlet />
+      <AppToaster />
+    </>
+  )
 }
