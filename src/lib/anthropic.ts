@@ -1,36 +1,40 @@
 /**
  * lib/anthropic.ts
  *
- * Client-side wrapper for calling the Supabase Edge Function that proxies
- * requests to the Anthropic API. The raw ANTHROPIC_API_KEY lives only in the
- * Edge Function environment — it is never sent to the browser.
+ * Client-side bridge to the Supabase Edge Function that proxies build
+ * generation to Claude. The Anthropic API key lives only in the Edge
+ * Function's environment — it is never sent to the browser.
  *
  * Edge Function: supabase/functions/generate-build/index.ts
- * Deploy with:   supabase functions deploy generate-build
+ * Contract:
+ *   request  → BuildDesignerInput (the designer form payload)
+ *   response → { builds: MinecraftBuild[]; warnings?: string[] }
+ *     The function is expected to parse, validate, and auto-correct the
+ *     AI output before returning. Builds in the array are safe to render.
  */
 
 import { supabase } from '@/lib/supabase'
-import type { BuildGenerationRequest, BuildGenerationResponse } from '@/types/build'
+import type { BuildDesignerInput, MinecraftBuild } from '@/types/build'
 
-/**
- * Calls the `generate-build` Supabase Edge Function and returns the parsed
- * AI-generated build. Throws on network or API errors.
- */
-export async function generateBuild(
-  request: BuildGenerationRequest
-): Promise<BuildGenerationResponse> {
-  const { data, error } = await supabase.functions.invoke<BuildGenerationResponse>(
+export interface GenerateBuildsResponse {
+  builds: MinecraftBuild[]
+  warnings?: string[]
+}
+
+/** Invoke the `generate-build` Edge Function. Throws on network / API errors. */
+export async function generateBuilds(
+  input: BuildDesignerInput,
+): Promise<GenerateBuildsResponse> {
+  const { data, error } = await supabase.functions.invoke<GenerateBuildsResponse>(
     'generate-build',
-    { body: request }
+    { body: input },
   )
 
   if (error) {
-    throw new Error(`Build generation failed: ${error.message}`)
+    throw new Error(error.message || 'Build generation failed.')
   }
-
-  if (!data) {
-    throw new Error('Build generation returned no data.')
+  if (!data || !Array.isArray(data.builds)) {
+    throw new Error('Build generation returned no builds.')
   }
-
   return data
 }

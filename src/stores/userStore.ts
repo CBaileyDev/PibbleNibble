@@ -15,10 +15,18 @@ interface UserState {
   user: SessionUser | null
   theme: Theme
   textured: boolean
+  /**
+   * True once the initial Supabase session check has completed — regardless
+   * of whether a user was found. Routes should wait on this before deciding
+   * to redirect, otherwise authenticated users get bounced on hard refresh
+   * (the persisted store only carries `theme` / `textured`, not `user`).
+   */
+  authReady: boolean
 
   setUser: (user: SessionUser | null) => void
   setTheme: (theme: Theme) => void
   setTextured: (v: boolean) => void
+  setAuthReady: (ready: boolean) => void
   clearUser: () => void
 }
 
@@ -28,6 +36,7 @@ export const useUserStore = create<UserState>()(
       user: null,
       theme: 'deepslate',
       textured: true,
+      authReady: false,
 
       setUser: (user) =>
         set({ user, theme: user?.profile.theme ?? 'deepslate' }),
@@ -39,6 +48,8 @@ export const useUserStore = create<UserState>()(
         })),
 
       setTextured: (textured) => set({ textured }),
+
+      setAuthReady: (ready) => set({ authReady: ready }),
 
       clearUser: () => set({ user: null, theme: 'deepslate' }),
     }),

@@ -10,10 +10,12 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
-import { BuildCard, type BuildProject } from '@/components/build/BuildCard'
+import { BuildCard, type BuildProject as CardProject } from '@/components/build/BuildCard'
 import { BuildCardSkeleton, EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
 import { useBuilds } from '@/hooks/useBuilds'
+import { useProjects } from '@/hooks/useProjects'
 import type { MinecraftBuild } from '@/types/build'
+import type { BuildProject } from '@/types/project'
 
 /* ───────────────────────── filter / sort types ───────────────────────── */
 
@@ -43,24 +45,31 @@ function readDescription(b: MinecraftBuild): string {
   return (r.description as string) ?? ''
 }
 
-/** Read the linked project, if the DB has bundled it onto the row. */
-function readProject(b: MinecraftBuild): BuildProject | undefined {
-  const r = b as unknown as Record<string, unknown>
-  const p = (r.project as BuildProject | undefined) ?? undefined
-  if (p && typeof p.status === 'string') return p
-  // Some rows carry a flat `status` field — promote it to a synthetic project.
-  if (typeof r.status === 'string' && r.status !== 'saved') {
-    return {
-      id: `synthetic-${b.id}`,
-      buildId: b.id,
-      status: r.status as BuildProject['status'],
-      progress: (r.progress as { current: number; total: number } | undefined) ??
-        { current: 0, total: 1 },
-      currentStepText: (r.currentStepText as string | undefined),
-      updatedAt: readUpdatedAt(b),
-    }
+/** Total number of steps across all phases of a build — used for progress math. */
+function totalStepCount(b: MinecraftBuild): number {
+  const r = b as unknown as { phases?: Array<{ steps?: unknown[] }> }
+  const phases = r.phases ?? []
+  let total = 0
+  for (const p of phases) total += p.steps?.length ?? 0
+  return total
+}
+
+/**
+ * Shape the canonical BuildProject into the trimmed variant BuildCard
+ * expects (it requires `progress`, ours has `completedSteps[]`).
+ */
+function toCardProject(project: BuildProject, build: MinecraftBuild): CardProject {
+  const total = Math.max(totalStepCount(build), 1)
+  const current = Math.min(project.completedSteps.length, total)
+  return {
+    id: project.id,
+    buildId: project.buildId,
+    name: project.name,
+    status: project.status,
+    progress: { current, total },
+    currentStepText: project.currentStepText,
+    updatedAt: project.updatedAt,
   }
-  return undefined
 }
 
 /* ───────────────────────── page component ───────────────────────── */
@@ -68,6 +77,7 @@ function readProject(b: MinecraftBuild): BuildProject | undefined {
 export function SavedBuilds() {
   const navigate = useNavigate()
   const { builds, loading, deleteBuild } = useBuilds()
+  const { byBuildId: projectsByBuildId } = useProjects()
 
   const [tab, setTab]       = useState<FilterTab>('all')
   const [sortBy, setSortBy] = useState<SortKey>('newest')
@@ -79,7 +89,7 @@ export function SavedBuilds() {
     let inProgress = 0
     let completed = 0
     for (const b of builds) {
-      const p = readProject(b)
+      const p = projectsByBuildId.get(b.id)
       if (!p) saved++
       else if (p.status === 'in-progress') inProgress++
       else if (p.status === 'done' || p.status === 'completed') completed++
@@ -90,13 +100,13 @@ export function SavedBuilds() {
       'in-progress': inProgress,
       completed,
     } satisfies Record<FilterTab, number>
-  }, [builds])
+  }, [builds, projectsByBuildId])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
 
     const filteredByTab = builds.filter((b) => {
-      const p = readProject(b)
+      const p = projectsByBuildId.get(b.id)
       if (tab === 'all')         return true
       if (tab === 'saved')       return !p
       if (tab === 'in-progress') return p?.status === 'in-progress'
@@ -132,7 +142,7 @@ export function SavedBuilds() {
     })
 
     return sorted
-  }, [builds, tab, query, sortBy])
+  }, [builds, tab, query, sortBy, projectsByBuildId])
 
   /* ───────── handlers ───────── */
 
@@ -251,12 +261,13 @@ export function SavedBuilds() {
         ) : (
           <div style={gridStyle}>
             {filtered.map((build) => {
-              const project = readProject(build)
+              const project = projectsByBuildId.get(build.id)
+              const cardProject = project ? toCardProject(project, build) : undefined
               return (
                 <BuildCard
                   key={build.id + (savedFlags[build.id] ? '-saved' : '')}
                   build={build}
-                  project={project}
+                  project={cardProject}
                   onContinue={() => handleContinue(build.id)}
                   onView={() => handleView(build.id)}
                   onDelete={() => void handleDelete(build.id)}
