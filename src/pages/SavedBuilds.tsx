@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { BuildCard, type BuildProject } from '@/components/build/BuildCard'
+import { BuildCardSkeleton, EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
 import { useBuilds } from '@/hooks/useBuilds'
 import type { MinecraftBuild } from '@/types/build'
 
@@ -234,9 +235,10 @@ export function SavedBuilds() {
         </div>
 
         {loading && builds.length === 0 ? (
-          <div style={emptyStyle}>
-            <span style={emptyGlyphStyle} aria-hidden>⏳</span>
-            <h2 style={emptyTitleStyle}>Loading your builds…</h2>
+          <div style={gridStyle} aria-busy aria-label="Loading builds">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <BuildCardSkeleton key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState
@@ -327,38 +329,34 @@ function EmptyState({
 }) {
   if (hasQuery) {
     return (
-      <div style={emptyStyle}>
-        <span style={emptyGlyphStyle} aria-hidden>🔍</span>
-        <h2 style={emptyTitleStyle}>No builds match your search</h2>
-        <p style={emptyBodyStyle}>
-          Try a different keyword, or clear the search to see everything in this tab.
-        </p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onClearSearch}>
-          Clear search
-        </button>
-      </div>
+      <EmptyStateUI
+        icon="🔍"
+        title="No builds match your search"
+        subtitle="Try a different keyword, or clear the search to see everything in this tab."
+        ctaLabel="Clear search"
+        onCta={onClearSearch}
+      />
     )
   }
 
   const copy = EMPTY_COPY[tab]
+  const ctaLabel =
+    copy.cta === 'generate' || copy.cta === 'viewSaved' ? copy.ctaLabel : undefined
+  const onCta =
+    copy.cta === 'generate'
+      ? onGenerate
+      : copy.cta === 'viewSaved'
+        ? onViewSaved
+        : undefined
 
   return (
-    <div style={emptyStyle}>
-      <span style={emptyGlyphStyle} aria-hidden>{copy.glyph}</span>
-      <h2 style={emptyTitleStyle}>{copy.title}</h2>
-      {copy.body && <p style={emptyBodyStyle}>{copy.body}</p>}
-      {copy.cta === 'generate' && (
-        <button type="button" className="btn btn-primary btn-sm" onClick={onGenerate}>
-          <Wand2 size={14} aria-hidden />
-          {copy.ctaLabel}
-        </button>
-      )}
-      {copy.cta === 'viewSaved' && (
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onViewSaved}>
-          {copy.ctaLabel}
-        </button>
-      )}
-    </div>
+    <EmptyStateUI
+      icon={copy.glyph}
+      title={copy.title}
+      subtitle={copy.body}
+      ctaLabel={ctaLabel}
+      onCta={onCta}
+    />
   )
 }
 
@@ -463,38 +461,4 @@ const gridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
   gap: 'var(--space-4)',
-}
-
-const emptyStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 10,
-  padding: '72px 24px',
-  background: 'var(--bg-surface)',
-  border: '1px dashed var(--border-strong)',
-  borderRadius: 'var(--r-lg)',
-  textAlign: 'center',
-}
-
-const emptyGlyphStyle: CSSProperties = {
-  fontSize: 48,
-  lineHeight: 1,
-}
-
-const emptyTitleStyle: CSSProperties = {
-  margin: 0,
-  fontFamily: 'var(--font-display)',
-  fontSize: 20,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: 'var(--text-primary)',
-}
-
-const emptyBodyStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  color: 'var(--text-secondary)',
-  maxWidth: 440,
 }

@@ -2,54 +2,74 @@
  * pages/BuildDesigner.tsx
  *
  * The AI build generator page. Users fill in the BuildDesignerForm;
- * on success they are routed to BuildResults with the response in state.
+ * on submit the BuildGeneratingOverlay shows while Claude produces
+ * variations. When generation settles, we navigate to BuildResults.
  */
 
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { BuildDesignerForm } from '@/components/build/BuildDesignerForm'
-import type { BuildGenerationResponse } from '@/types/build'
+import { BuildGeneratingOverlay, usePhaseCycler } from '@/components/ui/LoadingStates'
+import type { BuildDesignerInput } from '@/types/build'
+
+const GENERATION_MS = 15000
 
 export function BuildDesigner() {
   const navigate = useNavigate()
+  const [generating, setGenerating] = useState(false)
+  const phase = usePhaseCycler(generating, GENERATION_MS)
 
-  function handleGenerated(response: BuildGenerationResponse) {
-    navigate('/build-results', { state: { response } })
+  function handleSubmit(data: BuildDesignerInput) {
+    if (generating) return
+    setGenerating(true)
+    // The actual generation pipeline (lib/buildEngine/generator.ts) runs
+    // server-side via a Supabase Edge Function. Until that's wired in, the
+    // overlay plays its phase cycle, then we hand off to BuildResults so it
+    // can either render the returned batch or fall through to its empty state.
+    window.setTimeout(() => {
+      setGenerating(false)
+      navigate('/build-results', { state: { builds: [], input: data } })
+    }, GENERATION_MS)
   }
 
   return (
-    <PageLayout>
-      <div className="max-w-2xl mx-auto flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-[var(--radius-md)] bg-[var(--accent-subtle)] text-[var(--accent)]">
-            <Wand2 size={20} />
+    <>
+      <PageLayout>
+        <div className="max-w-2xl mx-auto flex flex-col gap-6">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-[var(--radius-md)] bg-[var(--accent-subtle)] text-[var(--accent)]">
+              <Wand2 size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">Build Designer</h2>
+              <p className="text-sm text-[var(--text-muted)]">
+                Describe your dream build and let AI design it for you.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Build Designer</h2>
-            <p className="text-sm text-[var(--text-muted)]">
-              Describe your dream build and let AI design it for you.
-            </p>
+
+          <SectionCard title="Describe Your Build">
+            <BuildDesignerForm onSubmit={handleSubmit} isLoading={generating} />
+          </SectionCard>
+
+          {/* Tips */}
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">💡 Tips for better results</p>
+            <ul className="text-xs text-[var(--text-muted)] flex flex-col gap-1 list-disc list-inside">
+              <li>Mention the style (medieval, modern, cosy, futuristic)</li>
+              <li>Specify if you want it survival-friendly</li>
+              <li>Add biome context — e.g. "nestled in a dark forest"</li>
+              <li>Include must-have features — "has a library and enchanting room"</li>
+            </ul>
           </div>
         </div>
+      </PageLayout>
 
-        <SectionCard title="Describe Your Build">
-          <BuildDesignerForm onGenerated={handleGenerated} />
-        </SectionCard>
-
-        {/* Tips */}
-        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
-          <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">💡 Tips for better results</p>
-          <ul className="text-xs text-[var(--text-muted)] flex flex-col gap-1 list-disc list-inside">
-            <li>Mention the style (medieval, modern, cosy, futuristic)</li>
-            <li>Specify if you want it survival-friendly</li>
-            <li>Add biome context — e.g. "nestled in a dark forest"</li>
-            <li>Include must-have features — "has a library and enchanting room"</li>
-          </ul>
-        </div>
-      </div>
-    </PageLayout>
+      <BuildGeneratingOverlay isVisible={generating} phase={phase} durationMs={GENERATION_MS} />
+    </>
   )
 }

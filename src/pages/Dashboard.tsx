@@ -25,6 +25,7 @@ import {
 
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
+import { DashboardSkeleton, EmptyState } from '@/components/ui/LoadingStates'
 import { useTheme } from '@/hooks/useTheme'
 import { useBuilds } from '@/hooks/useBuilds'
 import { useWorldNotes } from '@/hooks/useWorldNotes'
@@ -114,6 +115,17 @@ export function Dashboard() {
     [builds],
   )
 
+  if (buildsLoading && builds.length === 0) {
+    return (
+      <PageLayout
+        title="Workshop"
+        subtitle={`${theme === 'blossom' ? '🌸 ' : '⚡ '}Loading your workshop…`}
+      >
+        <DashboardSkeleton />
+      </PageLayout>
+    )
+  }
+
   return (
     <PageLayout
       title="Workshop"
@@ -183,11 +195,13 @@ export function Dashboard() {
                 onContinue={() => navigate(`/builds/${activeBuild.id}`)}
               />
             ) : (
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
-                {buildsLoading
-                  ? 'Loading your builds…'
-                  : 'No active builds yet. Generate one to get started!'}
-              </p>
+              <EmptyState
+                icon="⛏️"
+                title="No active builds yet"
+                subtitle="Generate your first build and start stacking blocks."
+                ctaLabel="Generate a build"
+                onCta={() => navigate('/build-designer')}
+              />
             )}
           </SectionCard>
 
@@ -206,9 +220,13 @@ export function Dashboard() {
             }
           >
             {recentBuilds.length === 0 ? (
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
-                {buildsLoading ? 'Loading…' : 'Generate your first build to see it here.'}
-              </p>
+              <EmptyState
+                icon="🔨"
+                title="Nothing fresh yet"
+                subtitle="Generate your first build to see it here."
+                ctaLabel="Open Build Designer"
+                onCta={() => navigate('/build-designer')}
+              />
             ) : (
               <div
                 style={{
