@@ -8,7 +8,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "type-check": "tsc -b --noEmit"
+    "type-check": "tsc -b --noEmit",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:build:mac-universal": "tauri build --target universal-apple-darwin",
+    "desktop:build:win": "tauri build --target x86_64-pc-windows-msvc"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
@@ -18,6 +23,8 @@
     "@hookform/resolvers": "^3.9.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-query": "^5.56.0",
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-shell": "^2.0.1",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.9.0",
     "lucide-react": "^0.441.0",
@@ -32,6 +39,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.1.0",
     "@types/node": "^22.5.5",
     "@types/react": "^18.3.7",
     "@types/react-dom": "^18.3.0",

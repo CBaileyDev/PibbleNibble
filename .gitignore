@@ -35,3 +35,9 @@ lerna-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Tauri (desktop shell)
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/WixTools*/
+src-tauri/*.keystore
