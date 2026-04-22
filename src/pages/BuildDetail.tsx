@@ -51,7 +51,7 @@ export function BuildDetail() {
           title="Build not found"
           subtitle="This build may have been deleted, or the link might be out of date."
           ctaLabel="Browse saved builds"
-          onCta={() => navigate('/saved-builds')}
+          onCta={() => navigate('/my-builds')}
           secondaryLabel="Generate a new one"
           onSecondary={() => navigate('/build-designer')}
         />

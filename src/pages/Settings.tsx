@@ -104,7 +104,7 @@ function ConfirmModal({
 
 export function Settings() {
   const user = useUserStore((s) => s.user)
-  const { profile, updateDisplayName, updatePreferences } = useUserProfile()
+  const { profile, updateDisplayName, updateAvatar, updatePreferences } = useUserProfile()
   const { notes, addNote, deleteNote } = useWorldNotes()
 
   // Profile (local draft, synced from profile)
@@ -142,6 +142,17 @@ export function Settings() {
       toast.success('Profile saved')
     } catch {
       toast.error('Failed to save profile')
+    }
+  }
+
+  async function handleSelectAvatar(id: string) {
+    const previous = selectedAvatar
+    setSelectedAvatar(id)
+    try {
+      await updateAvatar(id)
+    } catch {
+      setSelectedAvatar(previous)
+      toast.error('Failed to update avatar')
     }
   }
 
@@ -264,7 +275,7 @@ export function Settings() {
                     <button
                       key={a.id}
                       type="button"
-                      onClick={() => setSelectedAvatar(a.id)}
+                      onClick={() => void handleSelectAvatar(a.id)}
                       aria-pressed={active}
                       aria-label={`${a.name} avatar`}
                       title={a.name}

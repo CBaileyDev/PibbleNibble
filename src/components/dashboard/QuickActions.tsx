@@ -18,7 +18,7 @@ export function QuickActions() {
     },
     {
       label: 'Saved Builds',
-      to: '/saved-builds',
+      to: '/my-builds',
       icon: <BookOpen size={15} />,
       variant: 'secondary' as const,
     },

@@ -8,7 +8,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { SessionUser } from '@/types/user'
+import type { SessionUser, UserProfile } from '@/types/user'
 import type { Theme } from '@/types/user'
 
 interface UserState {
@@ -24,6 +24,7 @@ interface UserState {
   authReady: boolean
 
   setUser: (user: SessionUser | null) => void
+  setProfile: (profile: UserProfile) => void
   setTheme: (theme: Theme) => void
   setTextured: (v: boolean) => void
   setAuthReady: (ready: boolean) => void
@@ -40,6 +41,9 @@ export const useUserStore = create<UserState>()(
 
       setUser: (user) =>
         set({ user, theme: user?.profile.theme ?? 'deepslate' }),
+
+      setProfile: (profile) =>
+        set((s) => (s.user ? { user: { ...s.user, profile } } : {})),
 
       setTheme: (theme) =>
         set((s) => ({

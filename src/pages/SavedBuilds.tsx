@@ -6,8 +6,8 @@
  * and is filtered, searched, and sorted client-side.
  */
 
-import { useMemo, useState, type CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { BuildCard, type BuildProject as CardProject } from '@/components/build/BuildCard'
@@ -55,14 +55,39 @@ function toCardProject(project: BuildProject, build: MinecraftBuild): CardProjec
 
 /* ───────────────────────── page component ───────────────────────── */
 
+const ROUTE_TABS: Record<string, FilterTab> = {
+  '/my-builds':    'all',
+  '/saved-builds': 'all',
+  '/checklists':   'in-progress',
+  '/saved':        'saved',
+}
+
+const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
+  '/my-builds':    { title: 'My Builds',   subtitle: 'Every saved, in-progress, and completed build in one place.' },
+  '/saved-builds': { title: 'My Builds',   subtitle: 'Every saved, in-progress, and completed build in one place.' },
+  '/checklists':   { title: 'Checklists',  subtitle: 'Pick an in-progress build to jump back into its step checklist.' },
+  '/saved':        { title: 'Saved',       subtitle: 'Builds you’ve bookmarked but haven’t started yet.' },
+}
+
 export function SavedBuilds() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { builds, loading, deleteBuild } = useBuilds()
   const { byBuildId: projectsByBuildId } = useProjects()
 
-  const [tab, setTab]       = useState<FilterTab>('all')
+  const initialTab = ROUTE_TABS[pathname] ?? 'all'
+  const pageCopy = ROUTE_TITLES[pathname] ?? ROUTE_TITLES['/my-builds']!
+
+  const [tab, setTab]       = useState<FilterTab>(initialTab)
   const [sortBy, setSortBy] = useState<SortKey>('newest')
   const [query, setQuery]   = useState('')
+
+  // Re-sync the tab when the user navigates to another sidebar entry that
+  // shares this component — without this, /saved and /checklists would keep
+  // whatever tab was last selected.
+  useEffect(() => {
+    setTab(ROUTE_TABS[pathname] ?? 'all')
+  }, [pathname])
 
   const counts = useMemo(() => {
     let saved = 0
@@ -147,8 +172,8 @@ export function SavedBuilds() {
 
   return (
     <PageLayout
-      title="My Builds"
-      subtitle="Every saved, in-progress, and completed build in one place."
+      title={pageCopy.title}
+      subtitle={pageCopy.subtitle}
       headerActions={
         <button
           type="button"

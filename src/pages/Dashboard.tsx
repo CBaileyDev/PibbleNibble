@@ -137,8 +137,8 @@ export function Dashboard() {
       headerActions={
         <QuickActionsBar
           onGenerateBuild={() => navigate('/build-designer')}
-          onViewBuilds={() => navigate('/saved-builds')}
-          onOpenChecklists={() => navigate('/progress')}
+          onViewBuilds={() => navigate('/my-builds')}
+          onOpenChecklists={() => navigate('/checklists')}
         />
       }
     >
@@ -212,7 +212,7 @@ export function Dashboard() {
             headerAction={
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/saved-builds')}
+                onClick={() => navigate('/my-builds')}
                 style={{ fontSize: '0.8125rem', color: 'var(--accent)' }}
               >
                 See library →
@@ -240,7 +240,7 @@ export function Dashboard() {
                     key={build.id}
                     build={build}
                     onStart={() => navigate(`/builds/${build.id}`)}
-                    onSave={() => navigate('/saved-builds')}
+                    onSave={() => navigate('/my-builds')}
                   />
                 ))}
               </div>

@@ -39,6 +39,7 @@ function rowToProfile(row: Record<string, unknown>): UserProfile {
 export function useUserProfile() {
   const userId = useUserStore((s) => s.user?.id)
   const setStoreTheme = useUserStore((s) => s.setTheme)
+  const setStoreProfile = useUserStore((s) => s.setProfile)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -82,9 +83,16 @@ export function useUserProfile() {
         setError(err)
         throw err
       }
-      setProfile((prev) => (prev ? { ...prev, ...local, updatedAt: now } : prev))
+      setProfile((prev) => {
+        if (!prev) return prev
+        const next = { ...prev, ...local, updatedAt: now }
+        // Keep the Zustand session user in sync so the sidebar avatar,
+        // name, and theme dot update immediately on save.
+        setStoreProfile(next)
+        return next
+      })
     },
-    [userId],
+    [userId, setStoreProfile],
   )
 
   const updateTheme = useCallback(
@@ -98,6 +106,13 @@ export function useUserProfile() {
   const updateDisplayName = useCallback(
     async (name: string): Promise<void> => {
       await patch({ display_name: name }, { displayName: name })
+    },
+    [patch],
+  )
+
+  const updateAvatar = useCallback(
+    async (avatarUrl: string): Promise<void> => {
+      await patch({ avatar_url: avatarUrl }, { avatarUrl })
     },
     [patch],
   )
@@ -125,6 +140,7 @@ export function useUserProfile() {
     error,
     updateTheme,
     updateDisplayName,
+    updateAvatar,
     updatePreferences,
     refetch: fetchProfile,
   }
