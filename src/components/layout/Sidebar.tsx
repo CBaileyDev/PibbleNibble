@@ -3,14 +3,11 @@
  *
  * Primary navigation sidebar. Fixed left column, full viewport height.
  *
- * Driven by props (no router/store coupling) — the parent passes the active
- * route and receives navigation intents via onNavigate. Collapse state is
- * internal, toggled via the chevron at the top of the rail.
- *
- * Styled with CSS custom properties from globals.css (shared design system).
+ * Driven by props (no router coupling) — the parent passes the active route
+ * and receives navigation intents via onNavigate. Collapse state is owned
+ * by the Zustand store so it survives reloads.
  */
 
-import { useMemo, useState } from 'react'
 import {
   LayoutDashboard,
   Wand2,
@@ -18,21 +15,27 @@ import {
   CheckSquare,
   BarChart2,
   Bookmark,
+  MapPin,
   Settings,
   ChevronLeft,
+  LogOut,
   type LucideIcon,
 } from 'lucide-react'
+import { Avatar } from '@/components/ui/Avatar'
+import { useUserStore } from '@/stores/userStore'
 import styles from './Sidebar.module.css'
 
 interface SidebarUser {
   name: string
   theme: 'deepslate' | 'blossom'
+  avatarId?: string
 }
 
 export interface SidebarProps {
   currentRoute: string
   user: SidebarUser
   onNavigate: (route: string) => void
+  onSignOut?: () => void
 }
 
 interface NavItem {
@@ -48,19 +51,13 @@ const NAV_ITEMS: NavItem[] = [
   { route: '/checklists',      label: 'Checklists',     Icon: CheckSquare },
   { route: '/progress',        label: 'Progress',       Icon: BarChart2 },
   { route: '/saved',           label: 'Saved',          Icon: Bookmark },
+  { route: '/world-notes',     label: 'World Notes',    Icon: MapPin },
   { route: '/settings',        label: 'Settings',       Icon: Settings },
 ]
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
-export function Sidebar({ currentRoute, user, onNavigate }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  const initials = useMemo(() => getInitials(user.name), [user.name])
+export function Sidebar({ currentRoute, user, onNavigate, onSignOut }: SidebarProps) {
+  const collapsed = useUserStore((s) => s.sidebarCollapsed)
+  const setCollapsed = useUserStore((s) => s.setSidebarCollapsed)
   const themeDotColor = user.theme === 'blossom' ? '#E0446A' : '#00CCFF'
 
   return (
@@ -86,7 +83,7 @@ export function Sidebar({ currentRoute, user, onNavigate }: SidebarProps) {
         <button
           type="button"
           className={styles.collapseBtn}
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => setCollapsed(!collapsed)}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-expanded={!collapsed}
         >
@@ -122,11 +119,9 @@ export function Sidebar({ currentRoute, user, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      {/* ── User section ───────────────────────────────────────────── */}
+      {/* ── User section + sign out ────────────────────────────────── */}
       <div className={styles.user}>
-        <span className={styles.avatar} aria-hidden="true">
-          {initials}
-        </span>
+        <Avatar id={user.avatarId} size={32} />
         {!collapsed && (
           <div className={styles.userMeta}>
             <span className={styles.userName}>{user.name}</span>
@@ -138,6 +133,17 @@ export function Sidebar({ currentRoute, user, onNavigate }: SidebarProps) {
               <span className={styles.themeLabel}>{user.theme}</span>
             </span>
           </div>
+        )}
+        {onSignOut && (
+          <button
+            type="button"
+            className={styles.signOutBtn}
+            onClick={onSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <LogOut size={15} />
+          </button>
         )}
       </div>
     </aside>

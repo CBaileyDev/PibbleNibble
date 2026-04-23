@@ -8,15 +8,17 @@
  */
 
 import { motion } from 'framer-motion'
+import { usePreferences } from '@/hooks/usePreferences'
 import type { BuildStep } from '@/types/build'
 
 interface StepCardProps {
   step: BuildStep
   isCompleted: boolean
-  onToggle: (stepId: string, completed: boolean) => void
+  onToggle: (stepId: string) => void
 }
 
 export function StepCard({ step, isCompleted, onToggle }: StepCardProps) {
+  const { showTips } = usePreferences()
   return (
     <motion.div
       layout
@@ -30,7 +32,7 @@ export function StepCard({ step, isCompleted, onToggle }: StepCardProps) {
       <input
         type="checkbox"
         checked={isCompleted}
-        onChange={(e) => onToggle(step.stepId, e.target.checked)}
+        onChange={() => onToggle(step.stepId)}
         className="mt-0.5 size-4 accent-[var(--accent)] shrink-0 cursor-pointer"
         aria-label={`Mark step ${step.stepNumber} (${step.title}) ${isCompleted ? 'incomplete' : 'complete'}`}
       />
@@ -52,10 +54,10 @@ export function StepCard({ step, isCompleted, onToggle }: StepCardProps) {
           {step.description}
         </p>
 
-        {step.tip && (
+        {showTips && step.tip && (
           <p className="text-xs text-[var(--text-muted)] italic pl-6">💡 {step.tip}</p>
         )}
-        {step.warning && (
+        {showTips && step.warning && (
           <p className="text-xs pl-6" style={{ color: 'var(--warning, #FFB020)' }}>
             ⚠️ {step.warning}
           </p>

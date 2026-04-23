@@ -8,7 +8,15 @@ import type {
   Difficulty,
   ProgressionLevel,
 } from '@/types/build'
+import type { UserPreferences } from '@/types/user'
+import { usePreferences } from '@/hooks/usePreferences'
 import styles from './BuildDesignerForm.module.css'
+
+/** The designer supports tiny/small/medium/large; preferences store small/medium/large/epic.
+ *  Map "epic" to "large" since it's the biggest designer option. */
+function prefSizeToDesigner(size: UserPreferences['defaultBuildSize']): BuildSize {
+  return size === 'epic' ? 'large' : size
+}
 
 export interface BuildDesignerFormProps {
   onSubmit: (data: BuildDesignerInput) => void
@@ -103,10 +111,11 @@ interface FormErrors {
 }
 
 export function BuildDesignerForm({ onSubmit, isLoading = false }: BuildDesignerFormProps) {
+  const prefs = usePreferences()
   const [buildType, setBuildType] = useState<BuildType | ''>('')
   const [theme, setTheme] = useState<BuildTheme | ''>('')
-  const [size, setSize] = useState<BuildSize | ''>('')
-  const [difficulty, setDifficulty] = useState<Difficulty | ''>('')
+  const [size, setSize] = useState<BuildSize | ''>(prefSizeToDesigner(prefs.defaultBuildSize))
+  const [difficulty, setDifficulty] = useState<Difficulty | ''>(prefs.defaultDifficulty)
   const [progression, setProgression] = useState<ProgressionLevel | ''>('')
   const [biomes, setBiomes] = useState<Set<BiomeType>>(new Set())
   const [preferredBlocks, setPreferredBlocks] = useState('')

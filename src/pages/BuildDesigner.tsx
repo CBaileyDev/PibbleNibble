@@ -15,7 +15,7 @@ import { SectionCard } from '@/components/layout/SectionCard'
 import { BuildDesignerForm } from '@/components/build/BuildDesignerForm'
 import { BuildGeneratingOverlay, usePhaseCycler } from '@/components/ui/LoadingStates'
 import { toast } from '@/components/ui/Toast'
-import { generateBuilds } from '@/lib/anthropic'
+import { generateBuilds } from '@/lib/generateBuilds'
 import type { BuildDesignerInput } from '@/types/build'
 
 /** Rough expected wall-clock for the overlay's phase cycler animation. */

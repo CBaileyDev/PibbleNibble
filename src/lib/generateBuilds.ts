@@ -1,18 +1,19 @@
 /**
- * lib/anthropic.ts
+ * lib/generateBuilds.ts
  *
- * Client-side bridge to the Supabase Edge Function that proxies build
- * generation to Claude. The Anthropic API key lives only in the Edge
- * Function's environment — it is never sent to the browser.
+ * Client-side bridge to the Supabase Edge Function that generates builds.
+ * The function may route through Claude or Gemini server-side — the client
+ * is model-agnostic. API keys live only in the Edge Function's environment
+ * and are never sent to the browser.
  *
  * Edge Function: supabase/functions/generate-build/index.ts
  * Contract:
  *   request  → BuildDesignerInput (the designer form payload)
  *   response → { builds: MinecraftBuild[]; warnings?: string[] }
  *
- * Even though the Edge Function is expected to validate + auto-correct the
- * AI output, we re-parse through the canonical Zod schema here so shape
- * drift at the boundary can't crash React render paths.
+ * Even though the Edge Function validates and auto-corrects the AI output,
+ * we re-parse through the canonical Zod schema here so shape drift at the
+ * boundary can't crash React render paths.
  */
 
 import { supabase } from '@/lib/supabase'

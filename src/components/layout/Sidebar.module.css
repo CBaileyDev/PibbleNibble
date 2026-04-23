@@ -16,7 +16,7 @@
 }
 
 .sidebar.collapsed {
-  width: 64px;
+  width: 72px;
 }
 
 /* ── Header: logo + collapse toggle ────────────────────────────── */
@@ -30,6 +30,16 @@
   padding: 0 var(--space-3);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* Collapsed: stash the tiny logo mark, centre just the expand toggle. */
+.sidebar.collapsed .header {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.collapsed .logo {
+  display: none;
 }
 
 .logo {
@@ -181,8 +191,13 @@
   flex-shrink: 0;
 }
 
+/* Collapsed: stack the avatar + sign-out button vertically so neither
+   overflows the 72px rail, and drop the name/theme meta entirely. */
 .sidebar.collapsed .user {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   padding: var(--space-3) 0;
 }
 
@@ -241,4 +256,39 @@
   color: var(--text-muted);
   text-transform: capitalize;
   letter-spacing: 0.02em;
+}
+
+.signOutBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.signOutBtn:hover {
+  background: color-mix(in oklab, var(--error) 12%, transparent);
+  color: var(--error);
+  border-color: color-mix(in oklab, var(--error) 45%, var(--border));
+}
+
+.sidebar.collapsed .signOutBtn {
+  margin-left: 0;
+}
+
+/* The nav rail is narrower when collapsed; tighten padding so the active
+   right-border sits flush against the edge. */
+.sidebar.collapsed .nav {
+  padding: var(--space-3) 0;
 }

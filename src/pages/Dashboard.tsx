@@ -93,16 +93,53 @@ export function Dashboard() {
     return { activeBuild: fallback, activeProject: null }
   }, [projects, builds, recentBuilds])
 
+  /**
+   * Merge three kinds of events into a single chronological feed:
+   *   • saved     — build created (builds.generatedAt)
+   *   • started   — project moved out of 'todo' (projects.startedAt ?? createdAt)
+   *   • completed — project finished (projects.updatedAt for done/completed)
+   * Deduped to the most recent 8.
+   */
   const activities: ActivityItem[] = useMemo(() => {
-    return builds
-      .slice(0, 8)
-      .map((b) => ({
-        id: `act-${b.id}`,
+    const buildsById = new Map(builds.map((b) => [b.id, b]))
+    const events: ActivityItem[] = []
+
+    for (const b of builds) {
+      events.push({
+        id: `save-${b.id}`,
         message: `Saved ${b.name} to library`,
         timestamp: b.generatedAt,
-        type: 'save' as const,
-      }))
-  }, [builds])
+        type: 'save',
+      })
+    }
+
+    for (const p of projects) {
+      const build = buildsById.get(p.buildId)
+      if (!build) continue
+      if (p.status === 'in-progress') {
+        events.push({
+          id: `start-${p.id}`,
+          message: `Started building ${build.name}`,
+          timestamp: p.startedAt ?? p.createdAt,
+          type: 'start',
+        })
+      }
+      if (p.status === 'done' || p.status === 'completed') {
+        events.push({
+          id: `complete-${p.id}`,
+          message: `Completed ${build.name}`,
+          timestamp: p.updatedAt,
+          type: 'complete',
+        })
+      }
+    }
+
+    return events
+      .sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      )
+      .slice(0, 8)
+  }, [builds, projects])
 
   const completedCount = useMemo(
     () =>

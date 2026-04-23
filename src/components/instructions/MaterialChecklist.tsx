@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
 import { useMaterialChecklist } from '@/hooks/useMaterialChecklist'
 import { useProject } from '@/hooks/useProject'
+import { usePreferences } from '@/hooks/usePreferences'
 import type { MinecraftBuild, MaterialItem } from '@/types/build'
 
 interface MaterialChecklistProps {
@@ -26,6 +27,7 @@ function displayName(m: MaterialItem): string {
 }
 
 export function MaterialChecklist({ build }: MaterialChecklistProps) {
+  const { showQuantities } = usePreferences()
   // The project hook resolves (or creates) the per-user project row for
   // this build. We need its id to drive the checklist hook.
   const { project } = useProject(build.id)
@@ -123,9 +125,11 @@ export function MaterialChecklist({ build }: MaterialChecklistProps) {
                 </p>
               </div>
 
-              <span className="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
-                × {material.quantity}
-              </span>
+              {showQuantities && (
+                <span className="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
+                  × {material.quantity}
+                </span>
+              )}
             </label>
           )
         })}

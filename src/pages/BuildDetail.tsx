@@ -18,12 +18,14 @@ import { MaterialChecklist } from '@/components/instructions/MaterialChecklist'
 import { EmptyState, InstructionsSkeleton } from '@/components/ui/LoadingStates'
 import { useBuild } from '@/hooks/useBuilds'
 import { useProject } from '@/hooks/useProject'
+import { usePreferences } from '@/hooks/usePreferences'
 
 export function BuildDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { build, loading, error } = useBuild(id)
   const { completedSteps, toggleStepComplete } = useProject(id ?? '')
+  const { autoAdvance } = usePreferences()
   const [activePhaseId, setActivePhaseId] = useState<number | null>(null)
 
   // Resolve the phase to render. Defaults to the first phase; falls back
@@ -60,7 +62,22 @@ export function BuildDetail() {
   }
 
   async function handleStepToggle(stepId: string) {
+    const wasCompleted = completedSteps.has(stepId)
     await toggleStepComplete(stepId)
+    if (autoAdvance && !wasCompleted && build) {
+      // Jump to the phase containing the first still-incomplete step.
+      // completedSteps is a Set but doesn't yet reflect the toggle we
+      // just dispatched, so treat `stepId` as the one flipping to done.
+      for (const phase of build.phases) {
+        const hasOpen = phase.steps.some(
+          (s) => s.stepId !== stepId && !completedSteps.has(s.stepId),
+        )
+        if (hasOpen) {
+          setActivePhaseId(phase.phaseId)
+          return
+        }
+      }
+    }
   }
 
   return (

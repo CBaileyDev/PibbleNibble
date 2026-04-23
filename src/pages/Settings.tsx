@@ -15,33 +15,18 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
-import { Modal } from '@/components/ui/Modal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { toast } from '@/components/ui/Toast'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useWorldNotes } from '@/hooks/useWorldNotes'
+import { useBuilds } from '@/hooks/useBuilds'
+import { useProjects } from '@/hooks/useProjects'
 import { useUserStore } from '@/stores/userStore'
+import { Avatar, AVATAR_OPTIONS } from '@/components/ui/Avatar'
 import type { UserPreferences } from '@/types/user'
 import type { WorldNote } from '@/types/project'
 
-/* ─── Types & mock-free constants ────────────────────────────────────── */
-
-interface AvatarOption {
-  id: string
-  letter: string
-  name: string
-  color: string
-}
-
-const AVATAR_OPTIONS: AvatarOption[] = [
-  { id: 'creeper',  letter: 'C', name: 'Creeper',  color: '#66BB6A' },
-  { id: 'enderman', letter: 'E', name: 'Enderman', color: '#3B2A58' },
-  { id: 'pig',      letter: 'P', name: 'Pig',      color: '#F7B6C8' },
-  { id: 'wolf',     letter: 'W', name: 'Wolf',     color: '#C9CED3' },
-  { id: 'cat',      letter: 'K', name: 'Cat',      color: '#E8954A' },
-  { id: 'axolotl',  letter: 'A', name: 'Axolotl',  color: '#F2A3C7' },
-  { id: 'villager', letter: 'V', name: 'Villager', color: '#A27B5C' },
-  { id: 'steve',    letter: 'S', name: 'Steve',    color: '#4E7AC7' },
-]
+/* ─── Constants ───────────────────────────────────────────────────────── */
 
 const DIFFICULTY_OPTIONS = [
   { value: 'beginner', label: 'Beginner' },
@@ -58,54 +43,14 @@ const BUILD_SIZE_OPTIONS = [
   { value: 'epic',   label: 'Epic    (> 64 blocks)' },
 ]
 
-/* ─── Inline confirm dialog ──────────────────────────────────────────── */
-
-interface ConfirmModalProps {
-  isOpen: boolean
-  title: string
-  message: string
-  confirmLabel?: string
-  onConfirm: () => void
-  onClose: () => void
-}
-
-function ConfirmModal({
-  isOpen,
-  title,
-  message,
-  confirmLabel = 'Confirm',
-  onConfirm,
-  onClose,
-}: ConfirmModalProps) {
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="sm">
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-[var(--text-secondary)]">{message}</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              onConfirm()
-              onClose()
-            }}
-          >
-            {confirmLabel}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 /* ─── Page ───────────────────────────────────────────────────────────── */
 
 export function Settings() {
   const user = useUserStore((s) => s.user)
   const { profile, updateDisplayName, updateAvatar, updatePreferences } = useUserProfile()
   const { notes, addNote, deleteNote } = useWorldNotes()
+  const { builds } = useBuilds()
+  const { projects } = useProjects()
 
   // Profile (local draft, synced from profile)
   const [displayName, setDisplayName] = useState('')
@@ -198,7 +143,8 @@ export function Settings() {
       profile: { displayName, avatar: selectedAvatar },
       worldNotes: notes,
       preferences: prefs,
-      builds: [],
+      builds,
+      projects,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json',
@@ -206,11 +152,12 @@ export function Settings() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'pibble-nibble-builds.json'
+    a.download = `pibble-nibble-export-${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+    toast.success(`Exported ${builds.length} build${builds.length === 1 ? '' : 's'}`)
   }
 
   async function handlePrefChange(patch: Partial<UserPreferences>) {
@@ -280,23 +227,21 @@ export function Settings() {
                       aria-label={`${a.name} avatar`}
                       title={a.name}
                       style={{
-                        background: a.color,
-                        color: '#fff',
-                        border: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                        padding: 4,
+                        background: 'transparent',
+                        border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                         boxShadow: active
-                          ? '0 0 0 3px var(--accent-subtle), 0 2px 0 rgba(0,0,0,0.3)'
-                          : 'inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -2px 0 rgba(0,0,0,0.2)',
+                          ? '0 0 0 2px var(--accent-subtle)'
+                          : 'none',
                         borderRadius: 'var(--r-md)',
-                        fontFamily: 'var(--font-display)',
-                        fontWeight: 700,
-                        letterSpacing: '0.04em',
                         aspectRatio: '1 / 1',
                         cursor: 'pointer',
                         transition: 'transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
-                        fontSize: 'var(--text-lg)',
+                        display: 'grid',
+                        placeItems: 'center',
                       }}
                     >
-                      {a.letter}
+                      <Avatar id={a.id} size={44} />
                     </button>
                   )
                 })}

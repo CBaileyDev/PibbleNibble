@@ -15,6 +15,8 @@ interface UserState {
   user: SessionUser | null
   theme: Theme
   textured: boolean
+  /** Persisted sidebar collapse state — survives reloads. */
+  sidebarCollapsed: boolean
   /**
    * True once the initial Supabase session check has completed — regardless
    * of whether a user was found. Routes should wait on this before deciding
@@ -27,6 +29,7 @@ interface UserState {
   setProfile: (profile: UserProfile) => void
   setTheme: (theme: Theme) => void
   setTextured: (v: boolean) => void
+  setSidebarCollapsed: (v: boolean) => void
   setAuthReady: (ready: boolean) => void
   clearUser: () => void
 }
@@ -37,6 +40,7 @@ export const useUserStore = create<UserState>()(
       user: null,
       theme: 'deepslate',
       textured: true,
+      sidebarCollapsed: false,
       authReady: false,
 
       setUser: (user) =>
@@ -53,13 +57,19 @@ export const useUserStore = create<UserState>()(
 
       setTextured: (textured) => set({ textured }),
 
+      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+
       setAuthReady: (ready) => set({ authReady: ready }),
 
       clearUser: () => set({ user: null, theme: 'deepslate' }),
     }),
     {
       name: 'pibble-user',
-      partialize: (s) => ({ theme: s.theme, textured: s.textured }),
+      partialize: (s) => ({
+        theme: s.theme,
+        textured: s.textured,
+        sidebarCollapsed: s.sidebarCollapsed,
+      }),
     }
   )
 )

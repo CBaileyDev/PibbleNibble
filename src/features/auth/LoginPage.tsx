@@ -1,49 +1,47 @@
-/**
- * features/auth/LoginPage.tsx
- *
- * Email/password login form. Two accounts (Pibble & Nibble) each get
- * their own theme after login based on their profile row.
- */
-
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from './useAuth'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
 
-const schema = z.object({
-  email:    z.string().email('Enter a valid email.'),
-  password: z.string().min(6, 'Password must be at least 6 characters.'),
-})
-
-type FormValues = z.infer<typeof schema>
+const PLAYERS = [
+  {
+    name: 'pibble' as const,
+    label: 'Pibble',
+    emoji: '⛏️',
+    email: import.meta.env.VITE_PIBBLE_EMAIL as string,
+    password: import.meta.env.VITE_PIBBLE_PASSWORD as string,
+  },
+  {
+    name: 'nibble' as const,
+    label: 'Nibble',
+    emoji: '🌸',
+    email: import.meta.env.VITE_NIBBLE_EMAIL as string,
+    password: import.meta.env.VITE_NIBBLE_PASSWORD as string,
+  },
+]
 
 export function LoginPage() {
   const { signIn, user } = useAuth()
   const navigate = useNavigate()
+  const [loading, setLoading] = useState<'pibble' | 'nibble' | null>(null)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
-
-  // Navigate once the store has the authenticated user — avoids racing with
-  // AuthGate's async profile sync.
   useEffect(() => {
     if (user) navigate('/', { replace: true })
   }, [user, navigate])
 
-  async function onSubmit(values: FormValues) {
+  async function handleSelect(player: (typeof PLAYERS)[number]) {
+    if (!player.email || !player.password) {
+      toast.error(`${player.label} login is not configured.`)
+      return
+    }
+
+    setLoading(player.name)
     try {
-      await signIn(values.email, values.password)
+      await signIn(player.email, player.password)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Sign in failed.')
+      setLoading(null)
     }
   }
 
@@ -55,42 +53,48 @@ export function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
       >
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <span className="text-5xl">⛏️</span>
+        <div className="text-center mb-10">
+          <span className="text-5xl">🏡</span>
           <h1 className="mt-3 text-2xl font-bold text-[var(--text-primary)]">Pibble &amp; Nibble</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">Your Minecraft companion</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Who's playing?</p>
         </div>
 
-        {/* Form */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 flex flex-col gap-4">
-          <h2 className="text-base font-semibold text-[var(--text-primary)]">Sign in</h2>
+        <div className="flex flex-col gap-3">
+          {PLAYERS.map((player) => {
+            const isLoading = loading === player.name
+            const isDisabled = loading !== null
 
-          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-            <Input
-              label="Email"
-              type="email"
-              autoComplete="email"
-              placeholder="pibble@example.com"
-              error={errors.email?.message}
-              {...register('email')}
-            />
-            <Input
-              label="Password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              error={errors.password?.message}
-              {...register('password')}
-            />
-            <Button type="submit" isLoading={isSubmitting} className="w-full mt-1">
-              Sign in
-            </Button>
-          </form>
+            return (
+              <button
+                key={player.name}
+                onClick={() => handleSelect(player)}
+                disabled={isDisabled}
+                className="flex items-center gap-4 w-full px-6 py-5 rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)] hover:bg-[var(--surface-raised)] transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="text-3xl">{player.emoji}</span>
+                <span className="flex-1 text-lg font-semibold text-[var(--text-primary)]">
+                  {player.label}
+                </span>
+                {isLoading && (
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      border: '2px solid currentColor',
+                      borderTopColor: 'transparent',
+                      display: 'inline-block',
+                      animation: 'spin 0.6s linear infinite',
+                    }}
+                  />
+                )}
+              </button>
+            )
+          })}
         </div>
 
-        <p className="text-center text-xs text-[var(--text-muted)] mt-4">
-          Private app · Two accounts only
+        <p className="text-center text-xs text-[var(--text-muted)] mt-6">
+          Private app · Two players only
         </p>
       </motion.div>
     </div>

@@ -17,7 +17,34 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useUserStore } from '@/stores/userStore'
-import type { UserProfile } from '@/types/user'
+import {
+  DEFAULT_USER_PREFERENCES,
+  type Theme,
+  type UserPreferences,
+  type UserProfile,
+} from '@/types/user'
+
+/**
+ * Boundary conversion from a raw `profiles` row (snake_case) into the
+ * camelCase UserProfile shape the app uses everywhere. This matches the
+ * conversion in `useUserProfile.rowToProfile` — they must stay in sync.
+ */
+function rowToProfile(row: Record<string, unknown>): UserProfile {
+  return {
+    id: row.id as string,
+    authId: row.auth_id as string,
+    displayName: (row.display_name as string) ?? '',
+    minecraftUsername: (row.minecraft_username as string | null) ?? undefined,
+    avatarUrl: (row.avatar_url as string | null) ?? undefined,
+    theme: (row.theme as Theme) ?? 'deepslate',
+    preferences: {
+      ...DEFAULT_USER_PREFERENCES,
+      ...((row.preferences as Partial<UserPreferences> | null) ?? {}),
+    },
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }
+}
 
 /**
  * Mount-once auth subscription. Call this from <AuthGate/> only.
@@ -39,7 +66,11 @@ export function useAuthSubscription() {
         .maybeSingle()
       if (!active) return
       if (profile) {
-        setUser({ id: authId, email, profile: profile as UserProfile })
+        setUser({
+          id: authId,
+          email,
+          profile: rowToProfile(profile as Record<string, unknown>),
+        })
       }
     }
 
@@ -87,7 +118,8 @@ export function useAuth() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
     clearUser()
     navigate('/login')
   }

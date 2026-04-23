@@ -148,20 +148,30 @@ export function useProject(buildId: string) {
         ? current.completedSteps.filter((s) => s !== stepId)
         : [...current.completedSteps, stepId]
 
-      // Auto-bump status based on completion progress.
+      // Auto-bump status based on completion progress, and stamp startedAt
+      // the first time a step gets checked off on a fresh project.
       let status: ProjectStatus | undefined
       if (nextSteps.length > 0 && current.status === 'todo') {
         status = 'in-progress'
       }
 
-      await patchProject(
-        status
-          ? { completed_steps: nextSteps, status }
-          : { completed_steps: nextSteps },
-        status
-          ? { completedSteps: nextSteps, status }
-          : { completedSteps: nextSteps },
-      )
+      const startedAt =
+        status === 'in-progress' && !current.startedAt
+          ? new Date().toISOString()
+          : undefined
+
+      const rowPatch: Record<string, unknown> = { completed_steps: nextSteps }
+      const localPatch: Partial<BuildProject> = { completedSteps: nextSteps }
+      if (status) {
+        rowPatch.status = status
+        localPatch.status = status
+      }
+      if (startedAt) {
+        rowPatch.started_at = startedAt
+        localPatch.startedAt = startedAt
+      }
+
+      await patchProject(rowPatch, localPatch)
     },
     [patchProject],
   )

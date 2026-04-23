@@ -217,19 +217,19 @@
 
 .tileColStart {
   align-items: flex-start;
-  padding: 16px 16px 14px;
-  gap: 10px;
+  padding: 14px 12px 12px;
+  gap: 8px;
 }
 
 .tileCompact {
-  padding: 14px 8px;
-  gap: 8px;
+  padding: 12px 6px 10px;
+  gap: 6px;
 }
 
 .tileStageCard {
   align-items: flex-start;
-  padding: 14px 14px 12px;
-  gap: 8px;
+  padding: 12px 12px 10px;
+  gap: 6px;
 }
 
 .tileSelected {
@@ -296,13 +296,14 @@
   width: 100%;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
 }
 
 .sizeName {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: var(--tracking-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-primary);
 }
@@ -314,9 +315,10 @@
 
 .sizeDims {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-secondary);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .sizeDimsUnit {
@@ -324,16 +326,17 @@
 }
 
 .sizeFlavor {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .sizeBlocksBadge {
   display: inline-flex;
   align-items: flex-end;
   gap: 2px;
-  height: 18px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .sizeBlocksBadge > span {
@@ -354,27 +357,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  height: 22px;
+  gap: 1px;
+  height: 16px;
+}
+
+.swordsRow svg {
+  width: 8px;
+  height: 16px;
 }
 
 .diffLabel {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.15;
 }
 
 /* ── Stage tile specifics ─────────────────────────────────────── */
 
 .stageTitle {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: var(--tracking-display);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .tileSelected .stageTitle {
@@ -382,19 +393,20 @@
 }
 
 .stageSub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .paletteDots {
   display: flex;
-  gap: 5px;
-  margin-top: 4px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .paletteDot {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 2px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),

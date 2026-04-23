@@ -40,11 +40,21 @@ export function BuildResults() {
     if (announcedRef.current) return
     if (warnings.length === 0) return
     announcedRef.current = true
-    const summary =
-      warnings.length === 1
-        ? warnings[0]
-        : `${warnings.length} adjustments made by the validator.`
-    toast.info(summary)
+    const fallbackWarnings = warnings.filter((warning) => !warning.startsWith('['))
+    const validatorWarnings = warnings.filter((warning) => warning.startsWith('['))
+
+    fallbackWarnings.forEach((warning) => {
+      toast.info(warning)
+    })
+
+    if (validatorWarnings.length === 1) {
+      toast.info(validatorWarnings[0])
+      return
+    }
+
+    if (validatorWarnings.length > 1) {
+      toast.info(`${validatorWarnings.length} adjustments made by the validator.`)
+    }
   }, [warnings])
 
   async function persist(build: MinecraftBuild) {

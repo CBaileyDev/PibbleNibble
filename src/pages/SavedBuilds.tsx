@@ -12,6 +12,8 @@ import { Search, Wand2 } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { BuildCard, type BuildProject as CardProject } from '@/components/build/BuildCard'
 import { BuildCardSkeleton, EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { toast } from '@/components/ui/Toast'
 import { useBuilds } from '@/hooks/useBuilds'
 import { useProjects } from '@/hooks/useProjects'
 import type { MinecraftBuild } from '@/types/build'
@@ -81,6 +83,7 @@ export function SavedBuilds() {
   const [tab, setTab]       = useState<FilterTab>(initialTab)
   const [sortBy, setSortBy] = useState<SortKey>('newest')
   const [query, setQuery]   = useState('')
+  const [pendingDelete, setPendingDelete] = useState<MinecraftBuild | null>(null)
 
   // Re-sync the tab when the user navigates to another sidebar entry that
   // shares this component — without this, /saved and /checklists would keep
@@ -160,11 +163,18 @@ export function SavedBuilds() {
   function handleContinue(buildId: string) {
     navigate(`/builds/${buildId}`)
   }
-  async function handleDelete(buildId: string) {
+  function handleRequestDelete(build: MinecraftBuild) {
+    setPendingDelete(build)
+  }
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return
+    const buildName = pendingDelete.name
     try {
-      await deleteBuild(buildId)
+      await deleteBuild(pendingDelete.id)
+      toast.success(`Deleted "${buildName}"`)
     } catch {
-      /* error surfaced via hook state */
+      toast.error('Failed to delete build')
     }
   }
 
@@ -272,13 +282,22 @@ export function SavedBuilds() {
                   project={cardProject}
                   onContinue={() => handleContinue(build.id)}
                   onView={() => handleView(build.id)}
-                  onDelete={() => void handleDelete(build.id)}
+                  onDelete={() => handleRequestDelete(build)}
                 />
               )
             })}
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={pendingDelete !== null}
+        title={pendingDelete ? `Delete "${pendingDelete.name}"?` : 'Delete build?'}
+        message="This permanently removes the build and any progress attached to it. This action cannot be undone."
+        confirmLabel="Delete build"
+        onConfirm={() => void handleConfirmDelete()}
+        onClose={() => setPendingDelete(null)}
+      />
     </PageLayout>
   )
 }
