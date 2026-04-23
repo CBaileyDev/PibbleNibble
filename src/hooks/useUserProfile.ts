@@ -26,6 +26,7 @@ function rowToProfile(row: Record<string, unknown>): UserProfile {
     displayName: (row.display_name as string) ?? '',
     minecraftUsername: (row.minecraft_username as string | null) ?? undefined,
     avatarUrl: (row.avatar_url as string | null) ?? undefined,
+    anthropicApiKey: (row.anthropic_api_key as string | null) ?? undefined,
     theme: (row.theme as Theme) ?? 'deepslate',
     preferences: {
       ...DEFAULT_USER_PREFERENCES,
@@ -117,6 +118,16 @@ export function useUserProfile() {
     [patch],
   )
 
+  const updateApiKey = useCallback(
+    async (apiKey: string | null): Promise<void> => {
+      await patch(
+        { anthropic_api_key: apiKey },
+        { anthropicApiKey: apiKey ?? undefined },
+      )
+    },
+    [patch],
+  )
+
   const updatePreferences = useCallback(
     async (prefs: Partial<UserPreferences>): Promise<void> => {
       const current = profileRef.current
@@ -141,6 +152,7 @@ export function useUserProfile() {
     updateTheme,
     updateDisplayName,
     updateAvatar,
+    updateApiKey,
     updatePreferences,
     refetch: fetchProfile,
   }

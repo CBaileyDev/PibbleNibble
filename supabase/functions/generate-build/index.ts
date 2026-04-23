@@ -6,6 +6,7 @@
 //   { builds: MinecraftBuild[], warnings?: string[] }
 // exactly as the client's `generateBuilds` expects.
 
+import { createClient } from 'npm:@supabase/supabase-js@2.45.0';
 import { SYSTEM_PROMPT } from '../_shared/buildEngine/systemPrompt.ts';
 import { MinecraftBuildSchema } from '../_shared/buildEngine/schema.ts';
 import { validateBuild } from '../_shared/buildEngine/validator.ts';
@@ -35,6 +36,7 @@ Deno.serve(async (req) => {
   try {
     const input = await parseRequestBody(req);
     const variationCount = clampVariationCount(input.variationCount);
+    const apiKey = await resolveAnthropicKey(req);
 
     const system = SYSTEM_PROMPT.replaceAll(
       '{variationCount}',
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
 
     let rawText: string;
     try {
-      rawText = await callClaude(system, user, req.signal);
+      rawText = await callClaude(system, user, req.signal, apiKey);
     } catch (err) {
       if (req.signal.aborted) throw err;
       if (!isRetryable(err)) throw err;
@@ -150,4 +152,36 @@ function describeError(err: unknown): string {
   } catch {
     return String(err);
   }
+}
+
+async function resolveAnthropicKey(req: Request): Promise<string> {
+  const envKey = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return envKey || throwMissing();
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+
+  const { data, error } = await userClient
+    .from('profiles')
+    .select('anthropic_api_key')
+    .maybeSingle();
+
+  // 42703 = column does not exist — tolerate if migration hasn't been applied.
+  if (error && error.code !== '42703') {
+    console.warn('[generate-build] profile lookup failed:', error.message);
+  }
+  const userKey = (data?.anthropic_api_key as string | null) ?? '';
+  return userKey || envKey || throwMissing();
+}
+
+function throwMissing(): never {
+  throw new HttpError(
+    400,
+    'No Anthropic API key configured. Add one in Settings → AI Provider, or set the ANTHROPIC_API_KEY project secret.',
+  );
 }

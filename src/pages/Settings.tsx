@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Trash2, ChevronDown, AlertTriangle, Download } from 'lucide-react'
+import { Trash2, ChevronDown, AlertTriangle, Download, Eye, EyeOff, Key, RefreshCw } from 'lucide-react'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher'
@@ -43,11 +43,16 @@ const BUILD_SIZE_OPTIONS = [
   { value: 'epic',   label: 'Epic    (> 64 blocks)' },
 ]
 
+function maskKey(key: string): string {
+  if (!key || key.length < 11) return '••••'
+  return `${key.slice(0, 7)}…${key.slice(-4)}`
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────── */
 
 export function Settings() {
   const user = useUserStore((s) => s.user)
-  const { profile, updateDisplayName, updateAvatar, updatePreferences } = useUserProfile()
+  const { profile, updateDisplayName, updateAvatar, updateApiKey, updatePreferences } = useUserProfile()
   const { notes, addNote, deleteNote } = useWorldNotes()
   const { builds } = useBuilds()
   const { projects } = useProjects()
@@ -75,6 +80,12 @@ export function Settings() {
     defaultBuildSize: 'medium',
   }
 
+  // AI Provider (Anthropic BYOK)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [isReplacing, setIsReplacing] = useState(false)
+  const [showKey, setShowKey] = useState(false)
+  const [confirmClearKeyOpen, setConfirmClearKeyOpen] = useState(false)
+
   // Danger zone
   const [dangerOpen, setDangerOpen] = useState(false)
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
@@ -87,6 +98,29 @@ export function Settings() {
       toast.success('Profile saved')
     } catch {
       toast.error('Failed to save profile')
+    }
+  }
+
+  async function handleSaveApiKey() {
+    const trimmed = apiKeyDraft.trim()
+    if (!trimmed) return
+    try {
+      await updateApiKey(trimmed)
+      toast.success('API key saved')
+      setApiKeyDraft('')
+      setIsReplacing(false)
+      setShowKey(false)
+    } catch {
+      toast.error('Failed to save API key')
+    }
+  }
+
+  async function handleClearApiKey() {
+    try {
+      await updateApiKey(null)
+      toast.success('API key cleared')
+    } catch {
+      toast.error('Failed to clear API key')
     }
   }
 
@@ -250,7 +284,99 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 3. WORLD NOTES */}
+        {/* 3. AI PROVIDER */}
+        <SectionCard title="AI Provider">
+          {profile?.anthropicApiKey && !isReplacing ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: 'var(--success)',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span className="text-sm font-medium text-[var(--text-primary)]">
+                    Configured
+                  </span>
+                  <span className="text-xs truncate" style={monoStyle}>
+                    {maskKey(profile.anthropicApiKey)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="secondary"
+                    leftIcon={<RefreshCw size={14} />}
+                    onClick={() => setIsReplacing(true)}
+                  >
+                    Replace
+                  </Button>
+                  <Button
+                    variant="danger"
+                    leftIcon={<Trash2 size={14} />}
+                    onClick={() => setConfirmClearKeyOpen(true)}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                Used to generate builds. Stored on your profile; only you can read it.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <Input
+                    type={showKey ? 'text' : 'password'}
+                    leftElement={<Key size={14} />}
+                    placeholder="sk-ant-..."
+                    value={apiKeyDraft}
+                    onChange={(e) => setApiKeyDraft(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  leftIcon={showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  onClick={() => setShowKey((v) => !v)}
+                  aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => void handleSaveApiKey()}
+                  disabled={!apiKeyDraft.trim()}
+                >
+                  Save
+                </Button>
+                {isReplacing && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setApiKeyDraft('')
+                      setIsReplacing(false)
+                      setShowKey(false)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                Get one at console.anthropic.com → Settings → API Keys. Saved to your profile.
+              </p>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* 4. WORLD NOTES */}
         <SectionCard
           title="World Notes"
           subtitle="Coordinates and landmarks shared between both players."
@@ -340,7 +466,7 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 4. PREFERENCES */}
+        {/* 5. PREFERENCES */}
         <SectionCard title="Preferences">
           <div className="flex flex-col gap-4">
             <Toggle
@@ -382,7 +508,7 @@ export function Settings() {
           </div>
         </SectionCard>
 
-        {/* 5. DANGER ZONE */}
+        {/* 6. DANGER ZONE */}
         <section
           className="rounded-[var(--r-lg)] overflow-hidden"
           style={dangerCardStyle}
@@ -466,6 +592,18 @@ export function Settings() {
         confirmLabel="Yes, clear everything"
         onConfirm={() => void handleClearWorldNotes()}
         onClose={() => setConfirmClearOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={confirmClearKeyOpen}
+        title="Clear API key?"
+        message="Build generation will fall back to the project default key, or fail if none is configured."
+        confirmLabel="Yes, clear it"
+        onConfirm={() => {
+          void handleClearApiKey()
+          setConfirmClearKeyOpen(false)
+        }}
+        onClose={() => setConfirmClearKeyOpen(false)}
       />
     </PageLayout>
   )

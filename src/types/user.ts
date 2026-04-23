@@ -34,6 +34,7 @@ export interface UserProfile {
   /** In-game username for display in the UI. */
   minecraftUsername?: string
   avatarUrl?: string
+  anthropicApiKey?: string
   theme: Theme
   preferences: UserPreferences
   createdAt: string

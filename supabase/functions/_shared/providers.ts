@@ -25,10 +25,8 @@ export async function callClaude(
   system: string,
   user: string,
   signal: AbortSignal,
+  apiKey: string,
 ): Promise<string> {
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!apiKey) throw new HttpError(500, 'ANTHROPIC_API_KEY is not configured');
-
   const res = await fetch(CLAUDE_URL, {
     method: 'POST',
     signal,
