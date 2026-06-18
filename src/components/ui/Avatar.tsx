@@ -28,6 +28,8 @@ export interface AvatarOption {
   color: string
 }
 
+// Colocated with the <Avatar/> component it describes (avatar picker data).
+// eslint-disable-next-line react-refresh/only-export-components
 export const AVATAR_OPTIONS: AvatarOption[] = [
   { id: 'creeper',  name: 'Creeper',  color: '#3FAA51' },
   { id: 'enderman', name: 'Enderman', color: '#1A1320' },

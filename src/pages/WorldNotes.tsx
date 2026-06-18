@@ -41,17 +41,29 @@ export function WorldNotes() {
     pinColor: '#6d83f2',
   })
 
+  // Empty / non-numeric coordinate fields default to 0 rather than NaN.
+  const toCoord = (v: string): number => {
+    const n = Number(v.trim())
+    return Number.isFinite(n) ? n : 0
+  }
+
+  const trimmedLabel = form.label.trim()
+  const canSubmit = Boolean(user) && trimmedLabel.length > 0 && !isCreating
+
   async function handleCreate() {
-    if (!user || !form.label) return
+    if (!user || !trimmedLabel) {
+      toast.error('Give your note a label first.')
+      return
+    }
     setIsCreating(true)
     try {
       await addNote({
         userId: user.id,
-        label: form.label,
-        description: form.description || undefined,
-        x: Number(form.x),
-        y: Number(form.y),
-        z: Number(form.z),
+        label: trimmedLabel,
+        description: form.description.trim() || undefined,
+        x: toCoord(form.x),
+        y: toCoord(form.y),
+        z: toCoord(form.z),
         dimension: form.dimension,
         pinColor: form.pinColor,
       })
@@ -130,10 +142,10 @@ export function WorldNotes() {
             </div>
             <Select label="Dimension" options={DIMENSION_OPTIONS} value={form.dimension} onChange={(e) => setForm((f) => ({ ...f, dimension: e.target.value as WorldNote['dimension'] }))} />
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--text-secondary)]">Pin colour</label>
-              <input type="color" value={form.pinColor} onChange={(e) => setForm((f) => ({ ...f, pinColor: e.target.value }))} className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] cursor-pointer p-1" />
+              <label htmlFor="pin-colour" className="text-sm font-medium text-[var(--text-secondary)]">Pin colour</label>
+              <input id="pin-colour" type="color" aria-label="Pin colour" value={form.pinColor} onChange={(e) => setForm((f) => ({ ...f, pinColor: e.target.value }))} className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] cursor-pointer p-1" />
             </div>
-            <Button onClick={() => void handleCreate()} isLoading={isCreating} className="w-full mt-1">
+            <Button onClick={() => void handleCreate()} isLoading={isCreating} disabled={!canSubmit} className="w-full mt-1">
               Add Note
             </Button>
           </div>

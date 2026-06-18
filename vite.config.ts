@@ -43,5 +43,16 @@ export default defineConfig({
     target: isTauri ? ['es2022', 'chrome110', 'safari15'] : 'es2022',
     minify: 'esbuild',
     sourcemap: !isTauri,
+    rollupOptions: {
+      output: {
+        // Split large, rarely-changing vendor code into its own long-lived
+        // cache chunks so app updates don't invalidate the whole bundle.
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
   },
 })

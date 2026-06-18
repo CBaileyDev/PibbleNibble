@@ -11,19 +11,24 @@
  *   resolved the session, so the user check is safe.
  */
 
+import { lazy } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { AuthGate } from '@/components/layout/AuthGate'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
-import { Dashboard } from '@/pages/Dashboard'
-import { BuildDesigner } from '@/pages/BuildDesigner'
-import { BuildResults } from '@/pages/BuildResults'
-import { BuildDetail } from '@/pages/BuildDetail'
-import { SavedBuilds } from '@/pages/SavedBuilds'
-import { Progress } from '@/pages/Progress'
-import { WorldNotes } from '@/pages/WorldNotes'
-import { Settings } from '@/pages/Settings'
 import { useUserStore } from '@/stores/userStore'
+
+// Pages are code-split so the initial bundle only loads the auth shell.
+// Each route fetches its own chunk on first navigation (Suspense fallback
+// lives in <AppShell/> around the <Outlet/>).
+const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+const BuildDesigner = lazy(() => import('@/pages/BuildDesigner').then((m) => ({ default: m.BuildDesigner })))
+const BuildResults = lazy(() => import('@/pages/BuildResults').then((m) => ({ default: m.BuildResults })))
+const BuildDetail = lazy(() => import('@/pages/BuildDetail').then((m) => ({ default: m.BuildDetail })))
+const SavedBuilds = lazy(() => import('@/pages/SavedBuilds').then((m) => ({ default: m.SavedBuilds })))
+const Progress = lazy(() => import('@/pages/Progress').then((m) => ({ default: m.Progress })))
+const WorldNotes = lazy(() => import('@/pages/WorldNotes').then((m) => ({ default: m.WorldNotes })))
+const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
 
 /** Wraps protected routes — bounces unauthenticated users to /login. */
 function RequireAuth({ children }: { children: React.ReactNode }) {

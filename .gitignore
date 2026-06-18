@@ -41,3 +41,11 @@ src-tauri/target/
 src-tauri/gen/schemas/
 src-tauri/WixTools*/
 src-tauri/*.keystore
+
+# Supabase CLI scratch
+supabase/.temp/
+supabase/.branches/
+
+# Test coverage + local scratch
+coverage/
+tmp/

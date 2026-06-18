@@ -12,6 +12,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryProvider } from '@/providers/QueryProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 import { App } from './App'
 import '@/styles/globals.css'
 import '@/styles/animations.css'
@@ -21,10 +22,12 @@ if (!rootElement) throw new Error('Root element #root not found in index.html')
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryProvider>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </QueryProvider>
+    <ErrorBoundary>
+      <QueryProvider>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </QueryProvider>
+    </ErrorBoundary>
   </StrictMode>
 )
