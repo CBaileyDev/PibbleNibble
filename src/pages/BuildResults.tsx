@@ -11,7 +11,7 @@
  *                      lands in Phase 7 via useSaveBuild().
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BuildResultCard } from '@/components/build/BuildResultCard'
 import { EmptyState as EmptyStateUI } from '@/components/ui/LoadingStates'
@@ -30,7 +30,9 @@ export function BuildResults() {
   const { saveBuild } = useBuilds()
   const state = (location.state ?? {}) as BuildResultsLocationState
   const builds = state.builds ?? []
-  const warnings = state.warnings ?? []
+  // Stabilise across renders so the announce-once effect below isn't re-run
+  // on every render (location.state keeps a stable reference per navigation).
+  const warnings = useMemo(() => state.warnings ?? [], [state.warnings])
 
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set())
 

@@ -764,6 +764,8 @@ const overlayFootnoteStyle: CSSProperties = {
    thinking → designing → calculating over a total ~15s window.
    ──────────────────────────────────────────────────────────────────────── */
 
+// Hook colocated with the generation overlay it drives.
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePhaseCycler(active: boolean, totalMs = 15000): BuildGeneratingPhase {
   const [phase, setPhase] = useState<BuildGeneratingPhase>('thinking')
 

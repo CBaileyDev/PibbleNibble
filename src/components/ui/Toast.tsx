@@ -31,6 +31,8 @@ export function AppToaster() {
 }
 
 /** Typed toast helper — import this instead of sonner directly. */
+// Intentionally colocated with <AppToaster/>; this is the toast module.
+// eslint-disable-next-line react-refresh/only-export-components
 export const toast = {
   success: (message: string) => sonnerToast.success(message),
   error:   (message: string) => sonnerToast.error(message),

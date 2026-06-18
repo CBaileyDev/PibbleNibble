@@ -104,6 +104,12 @@ export function Settings() {
   async function handleSaveApiKey() {
     const trimmed = apiKeyDraft.trim()
     if (!trimmed) return
+    // Catch obvious paste mistakes before a round-trip — Anthropic keys are
+    // prefixed `sk-ant-`. The server validates for real on first generation.
+    if (!trimmed.startsWith('sk-ant-')) {
+      toast.error('That doesn’t look like an Anthropic key (should start with "sk-ant-").')
+      return
+    }
     try {
       await updateApiKey(trimmed)
       toast.success('API key saved')

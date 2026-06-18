@@ -16,9 +16,9 @@ Packaged with [Tauri](https://tauri.app/) (v2) for **Windows 11** and **macOS**.
 | Client state | Zustand |
 | Server state | TanStack Query v5 |
 | Animations | Framer Motion |
-| Forms | react-hook-form + zod |
-| Drag & drop | @dnd-kit |
+| Validation | Zod (build schema + AI output) |
 | Toasts | sonner |
+| Tests | Vitest |
 
 ## Themes
 
@@ -36,8 +36,18 @@ You need the web toolchain **and** the Rust toolchain used by Tauri.
 - Platform prerequisites (first time only):
   - **Windows 11**: "Desktop development with C++" workload in Visual Studio Build Tools, plus WebView2 Runtime (preinstalled on Windows 11).
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`). Builds universal binaries for Apple Silicon + Intel.
+  - **Linux** (dev / CI only — not a shipping target): the GTK/WebKit stack Tauri builds against. On Debian/Ubuntu:
+    ```bash
+    sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+      libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev
+    ```
+    Without these, `cargo check` / `tauri dev` fail at the `glib-sys` build script.
 
 See [Tauri prerequisites](https://tauri.app/start/prerequisites/) for the fully detailed per-OS list.
+
+> **Note:** The pure web workflow (`npm run dev`, `npm run build`, `npm test`,
+> `npm run lint`) needs only Node — no Rust toolchain required. Reach for the
+> Rust prerequisites only when running or packaging the desktop shell.
 
 ## Getting Started
 
@@ -45,17 +55,39 @@ See [Tauri prerequisites](https://tauri.app/start/prerequisites/) for the fully 
 # 1. Install JS deps
 npm install
 
-# 2. Copy env file and fill in your Supabase credentials
+# 2. Copy env file and fill in your credentials
 cp .env.example .env
+#    Required: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and the two player
+#    logins (VITE_PIBBLE_* / VITE_NIBBLE_*). Create both users first in
+#    Supabase Dashboard → Authentication → Users. See .env.example for details.
 
-# 3. (One-time) Generate app icons from a 1024×1024 source PNG
-npm run tauri icon path/to/source-icon.png
+# 3. Apply the database schema (RLS policies, tables, realtime)
+supabase db push        # or: psql -f supabase/migrations/0001_initial_schema.sql
 
-# 4. Launch the desktop app in dev mode (HMR + Rust hot-rebuild)
+# 4. (Browser-only UI work) start Vite
+npm run dev             # http://localhost:1420
+
+# 5. (Desktop) launch the Tauri shell in dev mode (HMR + Rust hot-rebuild)
+npm run tauri icon path/to/source-icon.png   # one-time: generate app icons
 npm run desktop:dev
 ```
 
-On first run, Cargo downloads and compiles the Rust dependencies — this takes a few minutes. Subsequent launches are fast.
+On first desktop run, Cargo downloads and compiles the Rust dependencies — this takes a few minutes. Subsequent launches are fast.
+
+## Quality gates
+
+```bash
+npm run lint         # ESLint (flat config: TS + React Hooks + React Refresh)
+npm run type-check   # tsc -b --noEmit, strict mode
+npm test             # Vitest unit tests (build validator + Zod schema)
+npm run test:watch   # Vitest in watch mode
+npm run test:coverage
+npm run build        # type-check + production web build
+```
+
+All four run in CI on every push and pull request (`.github/workflows/ci.yml`).
+The AI build-generation logic (`src/lib/buildEngine`) is the most rules-heavy
+part of the app and is covered by unit tests — see `*.test.ts` alongside it.
 
 ## Building installers
 
@@ -87,15 +119,16 @@ Unsigned builds work for local/sideload use. For distribution:
 ## Project Structure
 
 ```
-src/                     # React app (unchanged from the web build)
-├── components/
-├── pages/
-├── features/
-├── hooks/
-├── lib/
-├── stores/
-├── types/
-└── styles/
+src/                     # React app
+├── components/          # UI primitives, layout, feature components
+├── pages/               # Route screens (lazy-loaded)
+├── features/            # Auth and other vertical slices
+├── hooks/               # Supabase-backed data hooks (realtime)
+├── lib/                 # supabase client, buildEngine (schema + validator)
+├── stores/              # Zustand stores
+├── types/               # Shared TypeScript contracts
+├── styles/              # Global CSS + keyframes
+└── test/                # Test fixtures (Vitest)
 
 src-tauri/               # Desktop shell
 ├── Cargo.toml           # Rust manifest
@@ -107,7 +140,11 @@ src-tauri/               # Desktop shell
     ├── main.rs          # Binary entry (suppresses console on Windows release)
     └── lib.rs           # Tauri::Builder — plugins + context
 
-supabase/functions/      # Edge Functions (generate-build)
+supabase/
+├── functions/           # Edge Functions (generate-build: Claude + Gemini fallback)
+└── migrations/          # SQL schema + RLS policies
+
+docs/                    # Engineering handoff notes and the health audit
 ```
 
 ## How Supabase works in the desktop app
@@ -122,9 +159,10 @@ supabase/functions/      # Edge Functions (generate-build)
 | Script | What it does |
 |---|---|
 | `npm run dev` | Vite dev server in a browser (useful for UI-only work; port 1420). |
-| `npm run build` | Type-check + Vite production build into `dist/`. |
+| `npm run build` | Type-check (`tsc -b`) + Vite production build into `dist/`. |
+| `npm test` / `npm run test:watch` / `npm run test:coverage` | Vitest unit tests. |
 | `npm run desktop:dev` | Run Tauri shell against the Vite dev server with Rust hot-rebuild. |
 | `npm run desktop:build` | Full production desktop build for the current host OS. |
 | `npm run desktop:build:win` / `:mac-universal` | Explicit platform builds. |
 | `npm run tauri <cmd>` | Escape hatch to the Tauri CLI (`icon`, `info`, `signer`, …). |
-| `npm run lint` / `npm run type-check` | Frontend quality gates (unchanged). |
+| `npm run lint` / `npm run type-check` | Frontend quality gates. |

@@ -3,6 +3,17 @@
 Date: 2026-04-21 (UTC)
 Scope: Entire repository (`src`, `src-tauri`, build config, dependency metadata)
 
+> **Status update (2026-06-18):** Several findings below have since been
+> resolved. **CRITICAL-1** (lockfile drift) is fixed — `npm ci` is clean and
+> enforced in CI. **CRITICAL-2** (type pipeline) — `npm run type-check`
+> (`tsc -b`) is green and the production `build` now type-checks too. **HIGH-1**
+> (lint) — the placeholder ESLint config was replaced with a real flat config
+> (typescript-eslint + react-hooks + react-refresh) and the source is clean.
+> A CI workflow (`.github/workflows/ci.yml`) now runs lint, type-check, tests,
+> and build on every push/PR, and a Vitest suite covers the build engine.
+> **HIGH-2** (Linux desktop build deps) is documented in the README. The
+> remaining MEDIUM/LOW items below are still worth doing.
+
 ## 1) How this audit was performed
 
 ### Automated checks run

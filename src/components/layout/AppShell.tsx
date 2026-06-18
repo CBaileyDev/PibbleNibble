@@ -6,12 +6,13 @@
  * through to the sidebar's logout button.
  */
 
-import { type ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useUserStore } from '@/stores/userStore'
 import { useAuth } from '@/features/auth/useAuth'
 import { toast } from '@/components/ui/Toast'
 import { Sidebar } from './Sidebar'
+import { PageFallback } from './PageFallback'
 import styles from './AppShell.module.css'
 
 export interface AppShellProps {
@@ -50,8 +51,10 @@ export function AppShell({ children }: AppShellProps) {
         />
       </div>
 
-      <main className={styles.main}>
-        {children ?? <Outlet />}
+      <main className={styles.main} aria-label="Main content">
+        <Suspense fallback={<PageFallback />}>
+          {children ?? <Outlet />}
+        </Suspense>
       </main>
     </div>
   )

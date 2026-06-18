@@ -8,6 +8,15 @@
  * Import this file in globals.css or main.tsx after globals.css.
  */
 
+/* ─── Spin (loading spinners) ─────────────────────────────────────────────────
+   Referenced by inline `animation: spin ...` on Button, LoginPage, and the
+   route-loading PageFallback. Defined here so spinners actually rotate
+   (Tailwind only emits its own `spin` keyframe when `animate-spin` is used). */
+@keyframes spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
 /* ─── Fade ────────────────────────────────────────────────────────────────────*/
 @keyframes fade-in {
   from { opacity: 0; }
